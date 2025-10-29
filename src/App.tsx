@@ -4,6 +4,8 @@ import Home from "./ui/Home";
 import Chatbot from "./ui/Chatbot";
 
 export default function App() {
+  console.log("✅ App.tsx Loaded!"); // ✅ 여기에 추가
+
   return (
     <div className="flex min-h-screen bg-gray-900 text-white">
       {/* ✅ 왼쪽 사이드바 */}
