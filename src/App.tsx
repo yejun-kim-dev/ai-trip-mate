@@ -45,6 +45,8 @@ export default function App() {
 
   // isLoading이 false일 때만 메인 앱을 렌더링합니다.
 
+  console.log("✅ App.tsx Loaded!"); // ✅ 여기에 추가
+
   return (
     // 배경 (fixed inset-0...)
     <div className="fixed inset-0 flex justify-center items-center bg-[#1B1B1B] overflow-hidden">
