@@ -20,6 +20,6 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
-  "include": ["src"],
+  "include": ["src", "src/ui/.tsx"],
   "exclude": ["node_modules"]
 }

@@ -7,28 +7,32 @@ export default function Home() {
     navigate("/mytrip");
   };
 
+  const goToChatbot = () => {
+    navigate("/chatbot");
+  };
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
       <h1 className="text-5xl font-bold mb-4">🌏 AI Trip Mate</h1>
-      <p className="mb-6 text-lg">
+      <p className="mb-8 text-lg text-gray-300">
         여행지를 입력하고 AI가 일정을 만들어드릴게요!
       </p>
 
-      <input
-        type="text"
-        placeholder="예: 서울, 제주, 도쿄"
-        className="p-2 rounded text-black mb-3 w-80"
-      />
-      <button className="bg-blue-500 px-4 py-2 rounded mb-4">
-        AI 여행 일정 생성
-      </button>
+      <div className="flex flex-col gap-4">
+        <button
+          onClick={goToChatbot}
+          className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg text-white text-lg"
+        >
+          💬 여행지 추천 챗봇으로 이동
+        </button>
 
-      <button
-        onClick={goToMyTrip}
-        className="bg-green-500 px-4 py-2 rounded-lg"
-      >
-        🧳 내 여행 만들기 이동
-      </button>
+        <button
+          onClick={goToMyTrip}
+          className="bg-green-500 hover:bg-green-600 px-6 py-3 rounded-lg text-white text-lg"
+        >
+          🧳 내 여행 만들기 이동
+        </button>
+      </div>
     </div>
   );
 }
