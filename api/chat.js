@@ -2,13 +2,12 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    // ❗ GET이나 OPTIONS 요청은 405로 거부
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-    const message = body?.message;
+    const message = body?.message || "";
 
     if (!message) {
       return res.status(400).json({ reply: "⚠️ message가 비어 있어요." });
