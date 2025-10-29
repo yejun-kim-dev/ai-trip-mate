@@ -1,4 +1,4 @@
-import React from "react";
+// ❌ import React from "react";   ← 이 줄 삭제
 import { Routes, Route, Link } from "react-router-dom";
 import MyTrip from "./ui/MyTrip";
 import Home from "./ui/Home"; // 기존 첫 화면 (AI Trip Mate)
