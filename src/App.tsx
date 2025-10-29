@@ -1,44 +1,20 @@
-import { useState } from "react";
+import React from "react";
+import { Routes, Route, Link } from "react-router-dom";
+import MyTrip from "./ui/MyTrip";
+import Home from "./ui/Home"; // 기존 첫 화면 (AI Trip Mate)
 
-function App() {
-  const [destination, setDestination] = useState("");
-  const [days, setDays] = useState(1);
-  const [plan, setPlan] = useState("");
-
-  const generatePlan = async () => {
-    const res = await fetch("/api/plan?dest=" + destination + "&days=" + days);
-    const data = await res.json();
-    setPlan(data.plan);
-  };
-
+export default function App() {
   return (
-    <div style={{ padding: "40px", textAlign: "center" }}>
-      <h1>🧭 AI Trip Mate</h1>
-      <p>여행지를 입력하고 AI가 일정표를 만들어드릴게요!</p>
-      <input
-        type="text"
-        placeholder="예: 서울, 제주, 도쿄"
-        value={destination}
-        onChange={(e) => setDestination(e.target.value)}
-      />
-      <br />
-      <input
-        type="number"
-        min="1"
-        value={days}
-        onChange={(e) => setDays(parseInt(e.target.value))}
-      />
-      <br />
-      <button onClick={generatePlan}>AI 여행 일정 생성</button>
+    <div className="min-h-screen bg-gray-900 text-white">
+      <nav className="p-4 bg-gray-800 flex justify-between">
+        <Link to="/">🏠 홈</Link>
+        <Link to="/mytrip">🧳 내 여행</Link>
+      </nav>
 
-      {plan && (
-        <div style={{ marginTop: "20px" }}>
-          <h2>여행 일정 ✈️</h2>
-          <pre>{plan}</pre>
-        </div>
-      )}
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/mytrip" element={<MyTrip />} />
+      </Routes>
     </div>
   );
 }
-
-export default App;
