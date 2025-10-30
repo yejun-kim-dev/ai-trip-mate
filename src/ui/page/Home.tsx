@@ -103,13 +103,13 @@ export default function Home() {
 
       {/* 하단 버튼 */}
       <button
-  onClick={handleCreateTrip}
-  className="fixed bottom-12 bg-gradient-to-r from-[#319CE5] to-[#65E0FF] text-white font-semibold px-7 py-2.5 rounded-full shadow-lg text-[16px] 
-  hover:from-[#2474b0] hover:to-[#52c0d9] transition duration-300 focus:outline-none 
-  hover:border-none active:outline-none active:shadow-lg"
->
-  새 여행 만들기
-</button>
+        onClick={handleCreateTrip}
+        className="fixed bottom-12 bg-gradient-to-r from-[#319CE5] to-[#65E0FF] text-white font-semibold px-7 py-2.5 rounded-full shadow-lg text-[16px] 
+        hover:from-[#2474b0] hover:to-[#52c0d9] transition duration-300 focus:outline-none 
+        hover:border-none active:outline-none active:shadow-lg"
+      >
+        새 여행 만들기
+      </button>
     </div>
   );
 }
