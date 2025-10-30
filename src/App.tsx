@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Link, Navigate } from "react-router-dom";
-import Home from "./ui/Home";
-import MyTrip from "./ui/MyTrip";
-import Chatbot from "./ui/Chatbot";
+import Home from "./ui/page/Home";
+import MyTrip from "./ui/page/MyTrip";
+import Chatbot from "./ui/page/Chatbot";
 import "./App.css";
 import React, { useState, useEffect } from "react";
 
