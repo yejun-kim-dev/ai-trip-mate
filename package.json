@@ -1,7 +1,7 @@
 {
   "name": "ai-trip-mate",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,11 +18,26 @@
     "react-router-dom": "^7.9.4"
   },
   "devDependencies": {
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.0.4",
-    "tailwindcss": "^3.4.18",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.18",
     "typescript": "~5.9.3",
     "vite": "^7.1.7"
-  }
+  },
+  "engines": {
+    "node": "18.x"
+  },
+  "description": "AI Trip Mate - Gemini 기반 여행 도우미 React/Vite 웹앱",
+  "keywords": [
+    "vite",
+    "react",
+    "gemini",
+    "vercel",
+    "travel"
+  ],
+  "author": "NaRim Kim",
+  "license": "MIT"
 }
