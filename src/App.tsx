@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, Link, Navigate } from "react-router-dom";
 import Home from "./ui/page/Home";
-import MyTrip from "./ui/page/MyTrip";
+import MakeTrip from "./ui/page/MakeTrip";
 import Chatbot from "./ui/page/Chatbot";
+import MyTrip from "./ui/page/MyTrip";
 import "./App.css";
 import React, { useState, useEffect } from "react";
 
@@ -64,7 +65,8 @@ export default function App() {
           <Routes>
             {/* 기본 경로 설정 */}
             <Route path="/" element={<Home />} />
-            <Route path="/mytrip" element={<MyTrip />} />
+            <Route path="/maketrip" element={<MakeTrip />} />   {/* 여행 생성 */}
+            <Route path="/mytrip" element={<MyTrip />} />       {/* 여행 일정 */}
             <Route path="/chatbot" element={<Chatbot />} />
           </Routes>
         </main>

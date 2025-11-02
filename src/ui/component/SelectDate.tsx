@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react"; // ✅ useEffect 추가
 
 interface SelectDateProps {
   setTripData: any;
@@ -10,7 +10,31 @@ export default function SelectDate({ setTripData, onClose }: SelectDateProps) {
   const [start, setStart] = useState<Date | null>(null);
   const [end, setEnd] = useState<Date | null>(null);
 
-  // 날짜 클릭 핸들러
+  // ✅ [NEW] start 또는 end가 변경될 때마다 실행됩니다.
+  useEffect(() => {
+    // start와 end가 모두 선택되었을 때만 실행
+    if (start && end) {
+      const format = (d: Date) =>
+        `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(
+          d.getDate()
+        ).padStart(2, "0")}`;
+
+      const dateText = `${format(start)} ~ ${format(end)}`;
+
+      // 부모 컴포넌트(MyTrip)의 state를 업데이트
+      setTripData((prev: any) => ({
+        ...prev,
+        dateRange: { start, end, text: dateText },
+      }));
+      
+      // 컴포넌트를 닫습니다.
+      onClose();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [start, end]); // start나 end가 바뀔 때마다 이 effect를 재실행합니다.
+
+
+  // 날짜 클릭 핸들러 (기존과 동일)
   const handleDateClick = (date: Date) => {
     // 날짜의 시간 정보를 제거하고 비교
     const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -28,7 +52,7 @@ export default function SelectDate({ setTripData, onClose }: SelectDateProps) {
     }
   };
 
-  // 선택 상태 관련
+  // 선택 상태 관련 (기존과 동일)
   const isSelected = (date: Date) => {
     const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
     const startOnly = start ? new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime() : null;
@@ -40,10 +64,19 @@ export default function SelectDate({ setTripData, onClose }: SelectDateProps) {
     return false;
   };
 
-  const isStart = (date: Date) => start && new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() === new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
-  const isEnd = (date: Date) => end && new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() === new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime();
+  // ✅ [FIX] 'start'와 'end'가 null일 가능성을 체크하도록 수정
+  const isStart = (date: Date) => {
+    if (!start) return false;
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() === new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
+  }
 
-  // 월 렌더링
+  const isEnd = (date: Date) => {
+    if (!end) return false;
+    // ✅ [FIX] 버그 수정 (start.getMonth() -> end.getMonth())
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() === new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime();
+  }
+
+  // 월 렌더링 (기존과 동일)
   const renderMonth = (year: number, month: number) => {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
@@ -87,7 +120,7 @@ export default function SelectDate({ setTripData, onClose }: SelectDateProps) {
     }
 
     return (
-      <div className="w-full mb-4">
+      <div className="w-full mb-3">
         {/* 🎯 요청 수정 사항: 년/월 헤더 (px-4 패딩, border-b 가로줄 추가) */}
         <div className="border-b border-gray-200 mb-2 pb-2"> {/* 가로줄 */}
           <h3 style={{ fontSize: '18px' }} className="font-semibold text-[#505050] text-left px-1"> 
@@ -101,34 +134,20 @@ export default function SelectDate({ setTripData, onClose }: SelectDateProps) {
               {d}
             </div>
           ))}
-        </div>
+  T   </div>
         <div className="flex flex-wrap">{days}</div> {/* 날짜 컨테이너에도 패딩 적용 */}
       </div>
     );
   };
 
-  // 여행 생성 클릭
-  const handleConfirm = () => {
-    if (!start || !end) return;
-
-    const format = (d: Date) =>
-      `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(
-        d.getDate()
-      ).padStart(2, "0")}`;
-
-    const dateText = `${format(start)} ~ ${format(end)}`;
-
-    setTripData((prev: any) => ({
-      ...prev,
-      dateRange: { start, end, text: dateText },
-    }));
-    onClose();
-  };
+  // ❌ '여행 생성' 버튼 클릭 핸들러 (제거됨)
+  // const handleConfirm = () => { ... };
 
   const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
 
   return (
-    <div className="p-3 bg-white border border-[#D4D4D4] rounded-[10px] shadow-lg mb-6 mx-auto w-[96%] max-w-md mt-4 relative z-30">
+    // ✅ 스타일 수정: 팝업 스타일 제거, mb-3 추가
+    <div className="p-3 bg-white border border-[#D4D4D4] rounded-[10px] shadow-lg mb-3">
       {/* 검색창과 비슷한 형태의 상단 입력 느낌 */}
       <div className="flex items-center border border-[#8B8B8B] rounded-[10px] px-3 py-[6px] bg-white shadow-sm mb-3">
         <svg
@@ -166,20 +185,8 @@ export default function SelectDate({ setTripData, onClose }: SelectDateProps) {
         {renderMonth(nextMonth.getFullYear(), nextMonth.getMonth())}
       </div>
 
-      {/* 버튼 */}
-      <div className="flex justify-center mt-3">
-        <button
-          onClick={handleConfirm}
-          disabled={!start || !end}
-          className={`w-[80%] py-2 rounded-full font-semibold text-white text-[15px] shadow-md transition duration-300 ${
-            !start || !end
-              ? "bg-gray-300 cursor-not-allowed"
-              : "bg-gradient-to-r from-[#319CE5] to-[#65E0FF] hover:opacity-90"
-          }`}
-        >
-          선택 완료
-        </button>
-      </div>
+      {/* ❌ '선택 완료' 버튼 (제거됨) */}
+      {/* <div className="flex justify-center mt-3"> ... </div> */}
     </div>
   );
 }

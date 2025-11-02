@@ -29,7 +29,7 @@ export default function TripCompanion({ tripData, setTripData }: any) {
   };
 
   return (
-    <div className="p-3 bg-white border border-[#D4D4D4] rounded-[10px] shadow-lg mb-6 mx-auto w-[90%] max-w-md mt-4 relative z-30">
+    <div className="p-3 bg-white border border-[#D4D4D4] rounded-[10px] shadow-lg mb-3 mx-auto w-[100%] max-w-md relative z-30">
       {/* 항목 리스트 */}
       <div className="flex flex-col items-center space-y-3">
         {companionsConfig.map((comp) => (
@@ -45,16 +45,16 @@ export default function TripCompanion({ tripData, setTripData }: any) {
             
           >
             {/* 동반자 정보 */}
-            <div className="flex flex-col justify-center">
-              <span style={{ color: "#1a1a1a", fontWeight: 600, fontSize: "15px" }}>
-                {comp.label}
-              </span>
+            <div className="flex flex-col justify-start items-start">
+              <span style={{ color: "#1a1a1a", fontWeight: 500, fontSize: "16px" }}>
+                {comp.label}
+              </span>
               {comp.description && (
                 <span
                   style={{
                     fontSize: "8px",
                     color: "#6B7280",
-                    marginTop: "2px",
+                    marginTop: "1px",
                   }}
                 >
                     
@@ -66,49 +66,38 @@ export default function TripCompanion({ tripData, setTripData }: any) {
             {/* 수량 조절 버튼 */}
             <div className="flex items-center space-[24px]">
               <button
-                onClick={() => handleChange(comp.key, -1)}
-                    style={{
-                    width: "28px",
-                    height: "28px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#319CE5",
-                    background: "transparent",
-                    fontSize: "22px",
-                    lineHeight: "1",
-                }}
-                aria-label={`감소 (${comp.label})`}
-                disabled={getCompanionCount(comp.key) === 0}
-              >
-                −
-              </button>
-
+            onClick={() => handleChange(comp.key, -1)}
+            className="flex items-center justify-center w-[28px] h-[28px] text-[#319CE5] 
+                      bg-transparent text-[22px] leading-[1]
+                      border-none outline-none shadow-none select-none
+                      focus:outline-none focus:ring-0 active:outline-none active:border-none"
+            onMouseDown={(e) => e.preventDefault()}
+            aria-label={`감소 (${comp.label})`}
+            disabled={getCompanionCount(comp.key) === 0}
+          >
+            −
+          </button>
               <span
                 style={{
-                  fontWeight: 600,
+                  fontWeight: 500,
                   fontSize: "17px",
                   width: "24px",
                   textAlign: "center",
+                  color: "#292929ff",
                   lineHeight: "1",
                 }}
               >
                 {getCompanionCount(comp.key)}
               </span>
 
-              <button
+               <button
                 onClick={() => handleChange(comp.key, 1)}
-                    style={{
-                    width: "28px",
-                    height: "28px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#319CE5",
-                    background: "transparent",
-                    fontSize: "22px",
-                    lineHeight: "1",
-                }}
+                className="flex items-center justify-center w-[28px] h-[28px] text-[#319CE5] 
+                          bg-transparent text-[22px] leading-[1] select-none cursor-pointer
+                          border-none outline-none shadow-none
+                          focus:outline-none focus:ring-0
+                          active:outline-none active:border-none"
+                onMouseDown={(e) => e.preventDefault()} // 클릭 시 포커스 방지
                 aria-label={`추가 (${comp.label})`}
               >
                 ＋
@@ -116,6 +105,7 @@ export default function TripCompanion({ tripData, setTripData }: any) {
             </div>
           </div>
         ))}
+        
       </div>
     </div>
   );

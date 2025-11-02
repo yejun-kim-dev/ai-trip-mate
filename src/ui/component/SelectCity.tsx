@@ -20,7 +20,7 @@ export default function SelectCity({
   }, [selectedCountry]);
 
   return (
-    <div className="p-3 bg-white border border-[#D4D4D4] rounded-[10px] shadow-lg mb-6 mx-auto w-[90%] max-w-md mt-4 relative z-30">
+    <div className="p-3 bg-white border border-[#D4D4D4] rounded-[10px] shadow-lg mb-3 mx-auto w-[100%] max-w-md mt-4 relative z-30">
 
       {/* 검색창 */}
       <div className="flex items-center border border-[#8B8B8B] rounded-[10px] px-3 py-[6px] bg-white shadow-sm mb-3">
