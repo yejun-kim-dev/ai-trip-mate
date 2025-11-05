@@ -1,32 +1,55 @@
-// api/chat.js
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import * as chrono from "chrono-node";
+import { formatPopupResponse } from "./utils/formatPopupResponse.js";
 
-export default async function handler(req, res) {
+app.post("/api/chat", async (req, res) => {
   try {
-    // ✅ POST 요청만 허용
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method Not Allowed" });
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ error: "메시지가 없습니다." });
+
+    const parsed = chrono.parse(message);
+    let startDate = null;
+    let endDate = null;
+
+    if (parsed.length >= 2) {
+      startDate = chrono.parseDate(parsed[0].text);
+      endDate = chrono.parseDate(parsed[1].text);
+    } else if (parsed.length === 1) {
+      startDate = chrono.parseDate(parsed[0].text);
+      endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + 2);
     }
 
-    // ✅ 본문 파싱
-    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-    const userMessage = body.message;
-
-    if (!userMessage) {
-      return res.status(400).json({ error: "메시지가 비어 있습니다." });
+    if (!startDate || !endDate) {
+      startDate = new Date();
+      endDate = new Date();
+      endDate.setDate(startDate.getDate() + 2);
     }
 
-    // ✅ Gemini 연결
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const regionMatch = message.match(
+      /(서울|부산|대구|대전|광주|인천|제주|수원|울산)/
+    );
+    const region = regionMatch ? regionMatch[0] : "전국";
 
-    const result = await model.generateContent(userMessage);
+    // ✅ 여기만 추가된 부분
+    const BASE = process.env.PUBLIC_HOST || "http://localhost:1000";
 
-    const reply = result.response?.text() || "⚠️ Gemini로부터 응답이 없습니다.";
+    const popResp = await fetch(`${BASE}/api/popups`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        region,
+        startDate: startDate.toISOString().slice(0, 10),
+        endDate: endDate.toISOString().slice(0, 10),
+      }),
+    });
 
-    res.status(200).json({ reply });
+    const { popups } = await popResp.json();
+
+    const reply = formatPopupResponse(popups, region);
+
+    return res.json({ reply });
   } catch (err) {
-    console.error("Gemini API Error:", err);
-    res.status(500).json({ error: "서버 오류가 발생했습니다." });
+    console.error("❌ Chat Route Error:", err);
+    res.status(500).json({ error: "서버 내부 오류" });
   }
-}
+});
