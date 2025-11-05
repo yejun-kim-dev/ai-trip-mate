@@ -1,15 +1,84 @@
 "use client";
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { MapPinOff, Plus } from "lucide-react";
 import { TripState } from "../component/data/dummyTrips";
 import chatbotIcon from "../component/images/chatbot_icon.png";
+import { Camera } from "lucide-react";
+
 
 export default function MyTrip() {
   const navigate = useNavigate();
   const location = useLocation();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
 
   const rawTripData: TripState | undefined = location.state?.tripData;
+
+  // ✅ 뒤로가기(Back) 눌렀을 때 바로 홈으로 이동
+  useEffect(() => {
+    const handlePopState = () => {
+      navigate("/", { replace: true });
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [navigate]);
+
+  // ✅ Chatbot → MyTrip 이동 시 히스토리 중복 제거
+  useEffect(() => {
+    if (location.state?.tripData) {
+      window.history.replaceState({}, "", "/mytrip");
+    }
+  }, [location.state]);
+
+  // ✅ 최신 tripData 동기화
+  useEffect(() => {
+    if (!rawTripData) return;
+
+    const trips = JSON.parse(localStorage.getItem("trips") || "[]");
+    const latestTrip = trips.find(
+      (t: any) =>
+        String(t.id) === String(rawTripData.id) ||
+        String(t.tripNo) === String(rawTripData.tripNo)
+    );
+
+    if (latestTrip) {
+      latestTrip.dateRange = {
+        ...latestTrip.dateRange,
+        start: new Date(latestTrip.dateRange.start),
+        end: new Date(latestTrip.dateRange.end),
+      };
+
+      // ✅ location.state 갱신
+      location.state = { tripData: latestTrip };
+    }
+  }, [location.key]);
+
+  // ✅ 이미지 업로드 핸들러
+const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const base64 = reader.result as string;
+    setTripImage(base64);
+
+    // ✅ localStorage 내 trips 업데이트
+    const trips = JSON.parse(localStorage.getItem("trips") || "[]");
+    const idx = trips.findIndex(
+      (t: any) =>
+        String(t.id) === String(tripData?.id) ||
+        String(t.tripNo) === String(tripData?.tripNo)
+    );
+    if (idx !== -1) {
+      trips[idx].imageUrl = base64;
+      localStorage.setItem("trips", JSON.stringify(trips));
+    }
+  };
+  reader.readAsDataURL(file);
+};
 
   const tripData = rawTripData
     ? {
@@ -25,20 +94,21 @@ export default function MyTrip() {
         },
       }
     : undefined;
+  const [tripImage, setTripImage] = useState<string | null>(tripData?.imageUrl || null);
 
   if (!tripData) {
     return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center max-w-md mx-auto p-4 text-center">
-        <MapPinOff className="w-16 h-16 text-gray-300 mb-6" />
-        <h1 className="text-xl font-bold text-gray-800 mb-4">
+      <div className="min-h-[120vh] bg-white flex flex-col items-center justify-center max-w-md mx-auto p-4 text-center">
+        <MapPinOff className="w-8 h-8 text-gray-300 mb-6" />
+        <h1 className="text-[18px] font-bold text-gray-800 mb-2">
           여행 정보가 없습니다.
         </h1>
-        <p className="text-gray-600 mb-8">
+        <p className="text-gray-600 text-[15px] mb-10">
           홈 화면에서 여행을 선택해주세요.
         </p>
         <button
           onClick={() => navigate("/")}
-          className="px-6 py-2 bg-[#007AFF] text-white rounded-lg shadow-md hover:bg-[#0056b3] transition"
+          className="px-6 py-2 py-2.5 rounded-full bg-[#007AFF] text-[16px] text-white font-semibold shadow-md hover:bg-[#0056b3] transition"
         >
           홈으로 가기
         </button>
@@ -97,13 +167,10 @@ export default function MyTrip() {
       {/* 🎨 상단 이미지 섹션 */}
       <div className="fixed top-0 left-0 w-full max-w-md h-[190px] z-50">
         <img
-          src={
-            tripData.imageUrl ||
-            "https://placehold.co/600x400/007AFF/FFFFFF?text=My+Trip"
-          }
-          alt={`${tripData.city} 여행`}
-          className="absolute top-0 inset-0 w-full h-full object-cover"
-        />
+        src={tripImage || tripData.imageUrl || "https://placehold.co/600x400/007AFF/FFFFFF?text=My+Trip"}
+        alt={`${tripData.city} 여행`}
+        className="absolute top-0 inset-0 w-full h-full object-cover transition-all duration-300"
+      />
         <div className="absolute top-0 inset-0 bg-gradient-to-t from-black/60 via-black/50 to-transparent" />
         <div className="absolute bottom-5 left-0 right-0 text-center text-white px-6">
           <h2 className="font-bold text-[20px] drop-shadow-md">
@@ -115,9 +182,29 @@ export default function MyTrip() {
           </p>
           <p className="text-[14px] opacity-80">{getCompanionSummary()}</p>
         </div>
+        {/* 📷 수정 아이콘 */}
         <button
-          onClick={() => navigate(-1)}
-          className="absolute bottom-12 left-4 bg-transparent text-white p-2 rounded-full hover:bg-black/0 transition outline-none border-none focus:outline-none focus:ring-0 active:outline-none active:border-none"
+          onClick={() => fileInputRef.current?.click()}
+          className="absolute top-5 right-5 bg-black/40 hover:bg-black/60 transition p-1.5 rounded-full backdrop-blur-sm"
+          aria-label="이미지 변경"
+        >
+          <Camera className="w-5 h-5 text-white" />
+        </button>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleImageUpload}
+        />
+
+        {/* 🔙 뒤로가기 버튼 */}
+        <button
+          onClick={() => navigate("/", { replace: true })}
+          className="absolute bottom-12 left-4 bg-transparent text-white p-2 rounded-full 
+                     hover:bg-black/0 transition outline-none border-none 
+                     focus:outline-none focus:ring-0 active:outline-none active:border-none"
           aria-label="뒤로 가기"
         >
           <svg
@@ -173,13 +260,10 @@ export default function MyTrip() {
                       </div>
 
                       {/* ✅ 장소 카드 */}
-                      <div className="flex flex-col items-start bg-[#F8FAFC] border border-gray-200 rounded-lg px-4 py-1">
-                        {/* 장소 이름 */}
-                        <p className="text-[13px] font-semibold text-[#706F6F]">
+                      <div className="flex flex-col items-start bg-[#F8FAFC] border border-gray-200 rounded-lg px-3 py-2 text-left">
+                        <p className="text-[13px] font-semibold text-[#706F6F] leading-snug">
                           {place.name}
                         </p>
-
-                        {/* 운영기간 + 시간 */}
                         {(place as any).period || place.time ? (
                           <p className="text-[12px] font-medium text-[#706F6F]">
                             📅{" "}
@@ -188,8 +272,6 @@ export default function MyTrip() {
                               : place.period || place.time}
                           </p>
                         ) : null}
-
-                        {/* 위치 */}
                         {place.location && (
                           <p className="text-[12px] font-medium text-[#706F6F]">
                             📍 {place.location}
@@ -229,23 +311,34 @@ export default function MyTrip() {
         )}
       </div>
 
-      {/* 🎨 챗봇 버튼 (이미지로 교체됨) */}
+      {/* 🎨 챗봇 버튼 */}
       <button
-  onClick={() => navigate("/chatbot")}
-  className="fixed bottom-10 right-8 
-             rounded-full w-12 h-12 items-center
-             border-2 border-dashed border-gray-300 
-             bg-white shadow-xl transition-all duration-100 
-             focus:outline-none focus:ring-0 
-             active:scale-100
-             hover:bg-gray-50 hover:border-blue-400" 
->
- <img
-  src={chatbotIcon}
-  alt="AI 챗봇"
-  className="w-full h-full object-contain object-center rounded-full block scale-[8] translate-y-[4%]"
-/>
-</button>
+        onClick={() => {
+          const trips = JSON.parse(localStorage.getItem("trips") || "[]");
+          const foundTrip = trips.find(
+            (t: any) =>
+              Number(t.id) === Number(tripData.id) ||
+              Number(t.tripNo) === Number(tripData.tripNo)
+          );
+          navigate("/chatbot", {
+            state: { tripData: foundTrip || tripData },
+            replace: true,
+          });
+        }}
+        className="fixed bottom-9 right-8 rounded-full w-[62px] h-[62px] 
+                  border-2 border-dashed border-gray-300 bg-white shadow-xl 
+                  transition-all duration-100 focus:outline-none focus:ring-0 
+                  active:scale-100 hover:bg-gray-50 hover:border-blue-400
+                  flex items-center justify-center"
+      >
+        <div className="pointer-events-auto">
+          <img
+            src={chatbotIcon}
+            alt="AI 챗봇"
+            className="w-[84%] h-[84%] object-contain object-center rounded-full block scale-[8] translate-y-[4%]"
+          />
+        </div>
+      </button>
     </div>
   );
 }

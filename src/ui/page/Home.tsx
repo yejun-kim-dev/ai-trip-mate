@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 // ✅ 1. 'TripState' 타입과 'defaultTrips'를 data 파일에서 가져옵니다.
 import { defaultTrips, TripState } from "../component/data/dummyTrips";
+import chatbotIcon from "../component/images/chatbot_icon.png";
 // ❌ 2. 개별 이미지는 import할 필요 없습니다. (dummyTrips에 URL이 포함되어 있음)
 // import tripimage_sampleImg from "../component/images/tripimage_sample.jpg";
 // import tripbox_sampleImg from "../component/images/tripbox_sample.jpg";
@@ -79,7 +80,8 @@ export default function Home() {
 
     // ✅ 6. [로직 수정] 데이터를 변환하지 않고 '원본(raw)' 상태로 합칩니다.
     // MyTrip 페이지는 원본 TripState 객체를 필요로 합니다.
-    setTrips([...defaultTrips, ...storedTrips]);
+    setTrips(storedTrips);
+
     
   }, []); // 👈 의존성 배열은 비어있는 것이 맞습니다 (마운트 시 1회 실행)
 
@@ -131,15 +133,19 @@ export default function Home() {
                   <div className="flex justify-between items-end w-full">
                     {/* 왼쪽 텍스트 블록 */}
                     <div className="flex flex-col items-start text-left">
-                      <h2 className="font-extrabold text-[20px] leading-tight mb-1 tracking-tight">
+                      <h2
+                        className="font-extrabold text-[20px] leading-tight mb-1 tracking-tight 
+                                  whitespace-nowrap overflow-hidden text-ellipsis"
+                      >
                         {trip.country} {trip.city} 여행
                       </h2>
+
                       <p className="text-[14px] font-medium opacity-90">
                         {trip.dateRange.text || formatDateRange(trip.dateRange.start, trip.dateRange.end)}
                       </p>
                     </div>
                     {/* 오른쪽 동반자 정보 */}
-                    <p className="text-[14px] font-medium opacity-80 whitespace-nowrap text-right pl-2">
+                    <p className="text-[14px] font-medium opacity-80 whitespace-nowrap text-right">
                       {getCompanionSummary(trip.companions)}
                     </p>
                   </div>
@@ -156,11 +162,28 @@ export default function Home() {
       {/* 하단 버튼 */}
       <button
         onClick={handleCreateTrip}
-        className="fixed bottom-12 bg-gradient-to-r from-[#319CE5] to-[#65E0FF] text-white font-semibold px-7 py-2.5 rounded-full shadow-lg text-[16px] 
+        className="fixed bottom-14 bg-gradient-to-r from-[#319CE5] to-[#65E0FF] text-white font-semibold px-7 py-2.5 rounded-full shadow-lg text-[16px] 
          hover:from-[#2474b0] hover:to-[#52c0d9] transition duration-300 focus:outline-none 
          hover:border-none active:outline-none active:shadow-lg"
       >
         새 여행 만들기
+      </button>
+      {/* 💬 챗봇 버튼 */}
+      <button
+        onClick={() => navigate("/chatbot")}
+        className="fixed bottom-9 right-8 rounded-full w-[62px] h-[62px] 
+                  border-2 border-dashed border-gray-300 bg-white shadow-xl 
+                  transition-all duration-100 focus:outline-none focus:ring-0 
+                  active:scale-100 hover:bg-gray-50 hover:border-blue-400
+                  flex items-center justify-center"
+      >
+        <div className="pointer-events-auto">
+          <img
+            src={chatbotIcon}
+            alt="AI 챗봇"
+            className="w-[84%] h-[84%] object-contain object-center rounded-full block scale-[8] translate-y-[4%]"
+          />
+        </div>
       </button>
     </div>
   );

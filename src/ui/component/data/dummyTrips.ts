@@ -6,7 +6,7 @@ export interface Place {
   id: string;
   name: string;
   time?: string;       // 운영 시간
-  period?: string;     // 운영 기간 (추가됨)
+  period?: string;     // 운영 기간
   location?: string;
   memo?: string;
 }
@@ -22,7 +22,8 @@ export interface Companions {
 }
 
 export interface TripState {
-  id?: number;
+  id?: number;           // 내부 사용 ID
+  tripNo: number;        // ✅ 여행 번호 (고유 식별용)
   country: string;
   flag?: string;
   city: string;
@@ -39,6 +40,7 @@ export interface TripState {
 // ✅ 4. ✈️ 부산 여행 더미 데이터
 export const dummyBusanTrip: TripState = {
   id: 1,
+  tripNo: 1, // ✅ 여행 번호 추가
   country: "대한민국",
   city: "부산",
   dateRange: {
@@ -48,13 +50,12 @@ export const dummyBusanTrip: TripState = {
   },
   companions: { friends: 1 },
   imageUrl: tripbox_sampleImg,
-
   schedule: {
     1: [
       {
         id: "p1",
         name: "해운대 해수욕장",
-        period: "2025.06.01 ~ 2025.08.31", // ✅ 여름철 개장 기간
+        period: "2025.06.01 ~ 2025.08.31",
         time: "09:00 - 18:00",
         location: "부산광역시 해운대구",
       },
@@ -75,7 +76,7 @@ export const dummyBusanTrip: TripState = {
       {
         id: "p4",
         name: "국제시장 & 깡통시장 겨울축제",
-        period: "2025.12.20 ~ 2026.01.05", // ✅ 행사 기간 있음
+        period: "2025.12.20 ~ 2026.01.05",
         time: "11:00 - 21:00",
         location: "부산광역시 중구 신창동4가",
       },
@@ -90,7 +91,7 @@ export const dummyBusanTrip: TripState = {
       {
         id: "p6",
         name: "부산 불꽃축제",
-        period: "2025.12.25", // ✅ 단일 날짜 행사
+        period: "2025.12.25",
         time: "20:00 - 21:30",
         location: "광안대교 인근 해변",
       },
@@ -99,9 +100,10 @@ export const dummyBusanTrip: TripState = {
   },
 };
 
-// ✅ 5. ✈️ 제주도 여행 더미 데이터 (예시)
+// ✅ 5. ✈️ 제주도 여행 더미 데이터
 export const dummyJejuTrip: TripState = {
   id: 2,
+  tripNo: 2, // ✅ 여행 번호 추가
   country: "대한민국",
   city: "제주도",
   dateRange: {
@@ -111,7 +113,6 @@ export const dummyJejuTrip: TripState = {
   },
   companions: { family: 3 },
   imageUrl: tripimage_sampleImg,
-
   schedule: {
     1: [
       {
@@ -123,7 +124,7 @@ export const dummyJejuTrip: TripState = {
       {
         id: "j2",
         name: "우도 페리 탑승",
-        period: "연중무휴", // ✅ 기간만 있음
+        period: "연중무휴",
         time: "07:30 - 18:00",
         location: "제주시 우도면 하우목동항",
       },
