@@ -11,61 +11,67 @@ export default function Chatbot() {
   const [isLoading, setIsLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
-  // 🔽 스크롤을 자동으로 맨 아래로
+  // 🔽 스크롤 자동 이동
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ✅ 메시지 전송
-  const sendMessage = async () => {
+  // ✅ 메시지 전송 함수
+  const sendMessage = async (): Promise<void> => {
     if (!input.trim()) return;
 
     const userMessage: Message = { role: "user", text: input };
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev: Message[]) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/chat", {
+      // ✅ 포트 1000 고정
+      const res = await fetch("http://localhost:1000/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: input }),
       });
 
+      if (!res.ok) throw new Error(`서버 응답 실패 (${res.status})`);
+
       const data = await res.json();
 
       const botMessage: Message = {
         role: "bot",
-        text: data.reply || "⚠️ 서버 응답이 없습니다.",
+        text: data.reply || "⚠️ Gemini 응답이 비어 있습니다.",
       };
 
-      setMessages((prev) => [...prev, botMessage]);
+      setMessages((prev: Message[]) => [...prev, botMessage]);
     } catch (error) {
-      setMessages((prev) => [
+      console.error("❌ Chat Error:", error);
+      setMessages((prev: Message[]) => [
         ...prev,
-        { role: "bot", text: "❌ 오류가 발생했습니다. 다시 시도해주세요." },
+        {
+          role: "bot",
+          text: "❌ 오류가 발생했습니다. 서버를 확인해주세요.",
+        },
       ]);
-      console.error("Error:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ✅ Enter 키로도 전송
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  // ✅ Enter 키 전송
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === "Enter") sendMessage();
   };
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
-      {/* 상단 헤더 */}
+      {/* 헤더 */}
       <header className="bg-blue-600 text-white p-4 text-center text-lg font-bold shadow-md">
         🌏 AI Trip Mate
       </header>
 
       {/* 채팅 영역 */}
       <main className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map((msg, i) => (
+        {messages.map((msg: Message, i: number) => (
           <div
             key={i}
             className={`flex ${
