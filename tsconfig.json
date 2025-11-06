@@ -1,5 +1,4 @@
-{
-  "compilerOptions": {
+{ "compilerOptions": {
     "target": "ESNext",
     "useDefineForClassFields": true,
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
@@ -19,6 +18,6 @@
     "types": ["react", "react-dom"],
     "noImplicitAny": false
   },
-  "include": ["src"],
+  "include": ["src", "ai/api_connect"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
