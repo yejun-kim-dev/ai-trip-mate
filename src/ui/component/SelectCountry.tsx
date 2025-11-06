@@ -1,15 +1,39 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
-const countryData = [
-  { code: "KR", name: "대한민국", flag: "🇰🇷" },
-  { code: "GH", name: "가나", flag: "🇬🇭" },
-  { code: "GA", name: "가봉", flag: "🇬🇦" },
-  { code: "US", name: "미국", flag: "🇺🇸" },
-  { code: "JP", name: "일본", flag: "🇯🇵" },
-];
+interface Country {
+  code: string;
+  name: string;
+  flag: string;
+}
 
 export default function SelectCountry({ setTripData, onClose }: any) {
   const [search, setSearch] = useState("");
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // ✅ API에서 국가 리스트 불러오기
+  useEffect(() => {
+    fetch("/api/countries")
+      .then((res) => {
+        if (!res.ok) throw new Error("서버 응답 오류");
+        return res.json();
+      })
+      .then((data) => {
+        setCountries(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("❌ 국가 API 불러오기 실패:", err);
+        setError("국가 정보를 불러오지 못했습니다.");
+        setLoading(false);
+      });
+  }, []);
+
+  // ✅ 검색 필터 (대소문자 구분 없이)
+  const filtered = countries.filter((c) =>
+    c.name.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="p-3 bg-white border border-[#D4D4D4] rounded-[10px] shadow-lg">
@@ -39,34 +63,51 @@ export default function SelectCountry({ setTripData, onClose }: any) {
         />
       </div>
 
+      {/* 로딩 / 에러 상태 */}
+      {loading && (
+        <p className="text-center text-gray-400 text-sm py-4">
+          국가 목록을 불러오는 중...
+        </p>
+      )}
+      {error && (
+        <p className="text-center text-red-400 text-sm py-4">{error}</p>
+      )}
+
       {/* 리스트 */}
-      <div className="mt-1 max-h-40 overflow-y-auto space-y-[1px]">
-        {countryData
-          .filter((c) => c.name.includes(search))
-          .map((country) => (
-            <button
-              key={country.code}
-              onClick={() => {
-                setTripData((prev: any) => ({
-                  ...prev,
-                  country: country.name,
-                  flag: country.flag,
-                }));
-                onClose();
-              }}
-              className="w-full flex items-center space-x-3 py-[8px] px-3 rounded-lg bg-white hover:bg-gray-100 active:bg-gray-200 active:scale-[0.98] transition duration-150 text-left"
-            >
-              <img
-                src={`https://flagcdn.com/w40/${country.code.toLowerCase()}.png`}
-                alt={country.name}
-                className="w-[35px] h-[26px] object-cover rounded-[4px] border border-gray-200"
-              />
-              <span className="font-medium text-[#4B4B4B] text-[14px]">
-                {country.name}
-              </span>
-            </button>
-          ))}
-      </div>
+      {!loading && !error && (
+        <div className="mt-1 max-h-40 overflow-y-auto space-y-[1px]">
+          {filtered.length > 0 ? (
+            filtered.map((country) => (
+              <button
+                key={country.code}
+                onClick={() => {
+                  setTripData((prev: any) => ({
+                    ...prev,
+                    country: country.name,
+                    flag: country.flag,
+                  }));
+                  onClose();
+                }}
+                className="w-full flex items-center space-x-3 py-[8px] px-3 rounded-lg bg-white hover:bg-gray-100 active:bg-gray-200 active:scale-[0.98] transition duration-150 text-left"
+              >
+                {/* ✅ 깃발 (API에서 받은 flag URL 사용) */}
+                <img
+                  src={country.flag}
+                  alt={country.name}
+                  className="w-[35px] h-[26px] object-cover rounded-[4px] border border-gray-200"
+                />
+                <span className="font-medium text-[#4B4B4B] text-[14px]">
+                  {country.name}
+                </span>
+              </button>
+            ))
+          ) : (
+            <p className="text-center text-gray-400 text-sm py-4">
+              검색 결과가 없습니다.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

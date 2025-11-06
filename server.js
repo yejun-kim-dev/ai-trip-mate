@@ -8,8 +8,9 @@ import { fetchNaverPopupList } from "./utils/fetchNaverPopupList.js";
 import { formatPopupResponse } from "./utils/formatPopupResponse.js";
 import { citiesByCountry } from "./utils/citiesByCountry.js";
 
+
 // ✅ 추가된 부분
-import { fetchInstagramPopups } from "./instagram/popupCrawler.js";
+//import { fetchInstagramPopups } from "./instagram/popupCrawler.js";
 
 dotenv.config();
 
@@ -175,55 +176,65 @@ const PORT = 1000;
 // ==============================
 // 4) 국가 리스트 API
 // ============================app.get("/api/countries", async (req, res) => {
+// ==============================
+// 4) 한국어 국가 리스트 API
+// ==============================
 import https from "https";
 
 app.get("/api/countries", async (req, res) => {
   try {
     const agent = new https.Agent({ rejectUnauthorized: false });
 
-    // ✅ 필드 명시해서 요청 (400 차단 우회 핵심)
+    // ✅ 한국어 번역 포함된 국가 리스트 요청
     const response = await axios.get(
-      "https://restcountries.com/v2/all?fields=name,alpha2Code,flags",
+      "https://restcountries.com/v3.1/all?fields=translations,cca2,flags",
       { httpsAgent: agent }
     );
 
-    const data = response.data;
-
-    const countries = data
+    let countries = response.data
       .map((c) => ({
-        name: c.name,
-        code: c.alpha2Code,
-        flag: c.flags.svg,
+        name: c.translations?.kor?.common || c.translations?.eng?.common || "이름 없음",
+        code: c.cca2,
+        flag: c.flags?.svg || c.flags?.png || "",
       }))
       .filter((c) => c.code && c.flag);
+
+    // ✅ 가나다순 정렬 (한글 정렬 지원)
+    countries.sort((a, b) => a.name.localeCompare(b.name, "ko-KR"));
+
+    // ✅ 대한민국(KR)만 맨 위로 이동
+    const korea = countries.find((c) => c.code === "KR");
+    if (korea) {
+      countries = [korea, ...countries.filter((c) => c.code !== "KR")];
+    }
 
     res.json(countries);
   } catch (err) {
     console.error("❌ /api/countries 오류:", err.message);
-    res.status(500).json({ error: "국가 목록 불러오기 실패" });
+    res.status(500).json({ error: "한국어 국가 목록 불러오기 실패" });
   }
 });
-
 // ==============================
 // 5) 도시 리스트 API
 // ==============================
 app.get("/api/cities", (req, res) => {
-  const countryCode = req.query.country; // 예: KR, JP, US
+  const countryQuery = req.query.country; // 예: 대한민국, 일본 등
 
-  if (!countryCode) {
+  if (!countryQuery) {
     return res
       .status(400)
-      .json({ error: "country 쿼리값 필요 (예: ?country=KR)" });
+      .json({ error: "country 쿼리값 필요 (예: ?country=대한민국)" });
   }
 
-  const cities = citiesByCountry[countryCode.toUpperCase()];
+  const cities = citiesByCountry[countryQuery];
 
   if (!cities) {
     return res.status(404).json({ error: "해당 국가의 도시 목록이 없습니다." });
   }
 
-  res.json({ country: countryCode.toUpperCase(), cities });
+  res.json({ country: countryQuery, cities });
 });
+
 // ==============================
 // 6) 여행 날짜 캘린더 API
 // ==============================
