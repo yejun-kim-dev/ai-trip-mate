@@ -1,15 +1,18 @@
 // server.js
 import "dotenv/config";
+import { createClient } from "@supabase/supabase-js";
 import express from "express";
 import cors from "cors";
-import { createClient } from "@supabase/supabase-js";
-
-
 // ✅ 추가된 부분
 //import { fetchInstagramPopups } from "./instagram/popupCrawler.js";
 
 import { fetchNaverNewsPopups } from "./utils/fetchNaverNewsPopups.js";
 import { fetchNaverBlogPopups } from "./utils/fetchNaverBlogPopups.js";
+import {
+  parseUserQuery,
+  fetchPopupsFromDB,
+  summarizePopups,
+} from "./ai/searchPopups.js";
 
 import { fetchKCISAEvents } from "./utils/fetchKCISA.js";
 import { fetchKCISASpecial } from "./utils/fetchKCISASpecial.js";
@@ -146,6 +149,40 @@ app.post("/api/chat", async (req, res) => {
       endDate.setDate(startDate.getDate() + 2);
     }
 
+    // ==============================
+    // 🌟 팝업 추천 API (정보 검색 모듈)
+    // ==============================
+    app.post("/api/recommend", async (req, res) => {
+      console.log("📡 [recommend] 요청 수신:", req.body?.message);
+      try {
+        const { message } = req.body;
+        const { region, startDate, endDate } = parseUserQuery(message);
+
+        if (!region || !startDate) {
+          return res.json({ text: "여행 지역과 날짜를 알려주세요." });
+        }
+
+        const popups = await fetchPopupsFromDB(region, startDate, endDate);
+
+        if (!popups.length) {
+          return res.json({
+            text: `${region} 지역에 해당 기간의 팝업이 없습니다.`,
+          });
+        }
+
+        const summary = await summarizePopups(
+          popups,
+          region,
+          startDate,
+          endDate
+        );
+        res.json({ text: summary, results: popups });
+      } catch (err) {
+        console.error("❌ /api/recommend 오류:", err);
+        res.status(500).json({ error: "추천 실패" });
+      }
+    });
+
     // 지역 파싱
     const regionMatch = message.match(
       /(서울|부산|대구|대전|광주|인천|제주|수원|울산)/
@@ -194,7 +231,10 @@ app.get("/api/countries", async (req, res) => {
 
     let countries = response.data
       .map((c) => ({
-        name: c.translations?.kor?.common || c.translations?.eng?.common || "이름 없음",
+        name:
+          c.translations?.kor?.common ||
+          c.translations?.eng?.common ||
+          "이름 없음",
         code: c.cca2,
         flag: c.flags?.svg || c.flags?.png || "",
       }))
@@ -266,10 +306,6 @@ app.post("/api/calendar", (req, res) => {
     message: `여행은 총 ${days}일 입니다.`,
   });
 });
-
-app.listen(PORT, () =>
-  console.log(`🚀 Server running at http://localhost:${PORT}`)
-);
 
 // ✅ 지역축제 엑셀 데이터 로드
 const festivalList = parseFestivalExcel();

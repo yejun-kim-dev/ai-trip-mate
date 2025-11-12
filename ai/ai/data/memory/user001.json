@@ -1,0 +1,48 @@
+{
+  "userId": "user001",
+  "lastUpdated": "2025-11-12T06:07:36.088Z",
+  "travelHistory": [
+    {
+      "country": "한국",
+      "city": "부산",
+      "duration": "미정",
+      "companions": [
+        "친구"
+      ]
+    },
+    {
+      "country": "한국",
+      "city": "대구",
+      "duration": "미정",
+      "companions": [
+        "친구"
+      ]
+    },
+    {
+      "country": "한국",
+      "city": "대구",
+      "dateRange": "2025년 12월 24일 ~ 2025년 12월 25일",
+      "companions": [
+        "친구"
+      ],
+      "categories": [
+        "팝업"
+      ],
+      "brandOrKeyword": [
+        "리락쿠마"
+      ],
+      "intent": "콘텐츠추천"
+    }
+  ],
+  "preferences": [
+    "전시",
+    "팝업"
+  ],
+  "intentHistory": [
+    "콘텐츠추천",
+    "콘텐츠추천",
+    "콘텐츠추천",
+    "콘텐츠추천"
+  ],
+  "savedContents": []
+}
