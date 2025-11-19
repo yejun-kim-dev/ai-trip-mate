@@ -11,12 +11,12 @@ export default function Chatbot() {
   const [isLoading, setIsLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
-  // 🔽 스크롤을 자동으로 맨 아래로
+  // 🔽 스크롤 자동 아래로 이동
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ✅ 메시지 전송
+  // ✅ 메시지 전송 (LangChain 연결)
   const sendMessage = async () => {
     if (!input.trim()) return;
 
@@ -26,10 +26,14 @@ export default function Chatbot() {
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/chat", {
+      // ⭐ 여기! LangChain 기반 백엔드로 전송
+      const res = await fetch("/api/langchain-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input }),
+        body: JSON.stringify({
+          message: input,
+          userId: "user002", // 원하는 유저 아이디 넣기
+        }),
       });
 
       const data = await res.json();
@@ -51,7 +55,7 @@ export default function Chatbot() {
     }
   };
 
-  // ✅ Enter 키로도 전송
+  // 엔터키 전송
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") sendMessage();
   };
@@ -63,7 +67,7 @@ export default function Chatbot() {
         🌏 AI Trip Mate
       </header>
 
-      {/* 채팅 영역 */}
+      {/* 채팅 메시지 영역 */}
       <main className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((msg, i) => (
           <div
@@ -83,11 +87,13 @@ export default function Chatbot() {
             </div>
           </div>
         ))}
+
         {isLoading && (
           <div className="text-gray-500 text-sm animate-pulse">
             답변 생성 중...
           </div>
         )}
+
         <div ref={chatEndRef} />
       </main>
 
