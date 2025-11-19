@@ -19,6 +19,11 @@ import { fetchKCISASpecial } from "./utils/fetchKCISASpecial.js";
 import { parseFestivalExcel } from "./ai/data/parseFestivalExcel.js";
 import { fetchDaeguEvents } from "./ai/data/fetchDaeguEvents.js";
 
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -122,6 +127,52 @@ app.get("/api/events-data", async (req, res) => {
 });
 
 // ==============================
+// 🌟 팝업 추천 API (정보 검색 모듈)
+// ==============================
+app.post("/api/recommend", async (req, res) => {
+  console.log("📡 [recommend] 요청 수신:", req.body?.message);
+
+  try {
+    const { message } = req.body;
+    const { region, startDate, endDate } = parseUserQuery(message);
+    console.log("🔍 recommend 받은 파싱 결과:", {
+      region,
+      startDate,
+      endDate,
+    });
+
+    if (!region || !startDate) {
+      return res.json({ text: "여행 지역과 날짜를 알려주세요." });
+    }
+
+    const popups = await fetchPopupsFromDB(region, startDate, endDate);
+
+    if (!popups.length) {
+      return res.json({
+        text: `${region} 지역에 해당 기간의 팝업이 없습니다.`,
+      });
+    }
+
+    // 🟡 Gemini 요약 생성
+    const summary = await summarizePopups(popups, region, startDate, endDate);
+
+    // 🟢 너가 원하는대로 4가지 필드만 남기기
+    const cleaned = popups.map((p) => ({
+      name: p.name,
+      period: p.period,
+      location: p.location,
+      category: p.category,
+    }));
+
+    // 클라이언트로 전달
+    res.json({ text: summary, results: cleaned });
+  } catch (err) {
+    console.error("❌ /api/recommend 오류:", err);
+    res.status(500).json({ error: "추천 실패" });
+  }
+});
+
+// ==============================
 // 3) AI Chat Route
 // ==============================
 app.post("/api/chat", async (req, res) => {
@@ -149,39 +200,7 @@ app.post("/api/chat", async (req, res) => {
       endDate.setDate(startDate.getDate() + 2);
     }
 
-    // ==============================
-    // 🌟 팝업 추천 API (정보 검색 모듈)
-    // ==============================
-    app.post("/api/recommend", async (req, res) => {
-      console.log("📡 [recommend] 요청 수신:", req.body?.message);
-      try {
-        const { message } = req.body;
-        const { region, startDate, endDate } = parseUserQuery(message);
-
-        if (!region || !startDate) {
-          return res.json({ text: "여행 지역과 날짜를 알려주세요." });
-        }
-
-        const popups = await fetchPopupsFromDB(region, startDate, endDate);
-
-        if (!popups.length) {
-          return res.json({
-            text: `${region} 지역에 해당 기간의 팝업이 없습니다.`,
-          });
-        }
-
-        const summary = await summarizePopups(
-          popups,
-          region,
-          startDate,
-          endDate
-        );
-        res.json({ text: summary, results: popups });
-      } catch (err) {
-        console.error("❌ /api/recommend 오류:", err);
-        res.status(500).json({ error: "추천 실패" });
-      }
-    });
+    // 🌟 팝업 추천 API
 
     // 지역 파싱
     const regionMatch = message.match(

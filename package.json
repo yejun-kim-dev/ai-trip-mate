@@ -20,6 +20,7 @@
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "lucide-react": "^0.553.0",
+    "node-fetch": "^3.3.2",
     "puppeteer": "^24.28.0",
     "react-router-dom": "^7.9.5",
     "xlsx": "^0.18.5",
