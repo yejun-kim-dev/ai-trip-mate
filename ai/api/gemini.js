@@ -13,6 +13,8 @@ export async function getGeminiResponse(prompt) {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return "⚠️ GCP Gemini API key가 없습니다.";
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return "⚠️ GCP Gemini API key가 없습니다.";
 
     // ✔ generateContent에 사용할 실제 모델 (ListModels에서 나온 이름)
     const model = "gemini-2.0-flash";  // 또는 gemini-2.0-pro 등 가능
@@ -33,10 +35,24 @@ export async function getGeminiResponse(prompt) {
         topP: 0.8,
       },
     };
+    const body = {
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.9,
+        maxOutputTokens: 500,
+        topP: 0.8,
+      },
+    };
 
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
       body: JSON.stringify(body),
     });
 
@@ -57,6 +73,7 @@ export async function getGeminiResponse(prompt) {
 
   } catch (err) {
     console.error("❌ Gemini 호출 오류:", err);
+    return "⚠️ AI 응답 처리 중 오류가 발생했습니다.";
     return "⚠️ AI 응답 처리 중 오류가 발생했습니다.";
   }
 }

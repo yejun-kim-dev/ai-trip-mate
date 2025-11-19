@@ -1,22 +1,33 @@
+// server.js
+import "dotenv/config";
+import { createClient } from "@supabase/supabase-js";
 import express from "express";
-import dotenv from "dotenv";
 import cors from "cors";
-import axios from "axios";
-import * as chrono from "chrono-node";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { fetchNaverPopupList } from "./utils/fetchNaverPopupList.js";
-import { formatPopupResponse } from "./utils/formatPopupResponse.js";
-import { citiesByCountry } from "./utils/citiesByCountry.js";
-
-
 // ✅ 추가된 부분
 //import { fetchInstagramPopups } from "./instagram/popupCrawler.js";
 
-dotenv.config();
+import { fetchNaverNewsPopups } from "./utils/fetchNaverNewsPopups.js";
+import { fetchNaverBlogPopups } from "./utils/fetchNaverBlogPopups.js";
+import {
+  parseUserQuery,
+  fetchPopupsFromDB,
+  summarizePopups,
+} from "./ai/searchPopups.js";
+
+import { fetchKCISAEvents } from "./utils/fetchKCISA.js";
+import { fetchKCISASpecial } from "./utils/fetchKCISASpecial.js";
+import { parseFestivalExcel } from "./ai/data/parseFestivalExcel.js";
+import { fetchDaeguEvents } from "./ai/data/fetchDaeguEvents.js";
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+const PORT = process.env.PORT || 1000;
 
 // ==============================
 // 1) 데이터 수집 유틸
@@ -116,6 +127,52 @@ app.get("/api/events-data", async (req, res) => {
 });
 
 // ==============================
+// 🌟 팝업 추천 API (정보 검색 모듈)
+// ==============================
+app.post("/api/recommend", async (req, res) => {
+  console.log("📡 [recommend] 요청 수신:", req.body?.message);
+
+  try {
+    const { message } = req.body;
+    const { region, startDate, endDate } = parseUserQuery(message);
+    console.log("🔍 recommend 받은 파싱 결과:", {
+      region,
+      startDate,
+      endDate,
+    });
+
+    if (!region || !startDate) {
+      return res.json({ text: "여행 지역과 날짜를 알려주세요." });
+    }
+
+    const popups = await fetchPopupsFromDB(region, startDate, endDate);
+
+    if (!popups.length) {
+      return res.json({
+        text: `${region} 지역에 해당 기간의 팝업이 없습니다.`,
+      });
+    }
+
+    // 🟡 Gemini 요약 생성
+    const summary = await summarizePopups(popups, region, startDate, endDate);
+
+    // 🟢 너가 원하는대로 4가지 필드만 남기기
+    const cleaned = popups.map((p) => ({
+      name: p.name,
+      period: p.period,
+      location: p.location,
+      category: p.category,
+    }));
+
+    // 클라이언트로 전달
+    res.json({ text: summary, results: cleaned });
+  } catch (err) {
+    console.error("❌ /api/recommend 오류:", err);
+    res.status(500).json({ error: "추천 실패" });
+  }
+});
+
+// ==============================
 // 3) AI Chat Route
 // ==============================
 app.post("/api/chat", async (req, res) => {
@@ -142,6 +199,8 @@ app.post("/api/chat", async (req, res) => {
       endDate = new Date();
       endDate.setDate(startDate.getDate() + 2);
     }
+
+    // 🌟 팝업 추천 API
 
     // 지역 파싱
     const regionMatch = message.match(
@@ -171,8 +230,6 @@ app.post("/api/chat", async (req, res) => {
     res.status(500).json({ error: "서버 내부 오류" });
   }
 });
-
-const PORT = 1000;
 // ==============================
 // 4) 국가 리스트 API
 // ============================app.get("/api/countries", async (req, res) => {
@@ -193,7 +250,10 @@ app.get("/api/countries", async (req, res) => {
 
     let countries = response.data
       .map((c) => ({
-        name: c.translations?.kor?.common || c.translations?.eng?.common || "이름 없음",
+        name:
+          c.translations?.kor?.common ||
+          c.translations?.eng?.common ||
+          "이름 없음",
         code: c.cca2,
         flag: c.flags?.svg || c.flags?.png || "",
       }))
@@ -266,21 +326,105 @@ app.post("/api/calendar", (req, res) => {
   });
 });
 
-app.listen(PORT, () =>
-  console.log(`🚀 Server running at http://localhost:${PORT}`)
-);
+// ✅ 지역축제 엑셀 데이터 로드
+const festivalList = parseFestivalExcel();
+console.log(`🎪 지역축제 데이터 로드 완료: ${festivalList.length}개`);
 
-app.post("/api/popups", async (req, res) => {
-  const { region, startDate, endDate } = req.body;
+// ─────────────────────────────
+// ✅ 오늘 포함 "미래 일정"만 필터링
+// ─────────────────────────────
+function filterFutureEvents(list) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // 자정 기준으로 비교
 
-  if (!region || !startDate || !endDate) {
-    return res.status(400).json({ error: "region, startDate, endDate 필요" });
+  return list.filter((item) => {
+    if (!item.period) return false;
+
+    // "YYYY-MM-DD" 형식 추출
+    const match = item.period.match(/(\d{4}-\d{2}-\d{2})/g);
+    if (!match || match.length === 0) return false;
+
+    // 종료일이 있으면 종료일 기준으로 판단, 없으면 시작일로 판단
+    const endDateStr = match.length === 2 ? match[1] : match[0];
+    const endDate = new Date(endDateStr);
+
+    // 오늘 포함해서 이후 행사만 유지
+    return endDate >= today;
+  });
+}
+
+// ─────────────────────────────
+// ✅ Supabase 저장 함수
+// ─────────────────────────────
+async function savePopupsToDB(data) {
+  const unique = Array.from(new Map(data.map((p) => [p.url, p])).values());
+  const { error } = await supabase
+    .from("popups")
+    .upsert(unique, { onConflict: "url" });
+
+  if (error) {
+    console.error("❌ Supabase 저장 실패:", error.message);
+  } else {
+    console.log(`✅ Supabase 저장 완료 (${unique.length}건)`);
   }
+}
 
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+// ─────────────────────────────
+// ✅ 자동 업데이트
+// ─────────────────────────────
+let isUpdating = false;
+async function autoUpdatePopups() {
+  if (isUpdating) return;
+  isUpdating = true;
 
-  const popups = await fetchNaverPopupList(region, start, end);
+  console.log("🔄 자동 업데이트 시작...");
 
-  res.json({ popups });
+  try {
+    const [news, blog, kcisa, special, daegu] = await Promise.allSettled([
+      fetchNaverNewsPopups(),
+      fetchNaverBlogPopups(),
+      fetchKCISAEvents(),
+      fetchKCISASpecial(),
+      fetchDaeguEvents(),
+    ]);
+
+    let all = [
+      ...(news.value || []),
+      ...(blog.value || []),
+      ...(kcisa.value || []),
+      ...(special.value || []),
+      ...(daegu.value || []),
+      ...festivalList,
+    ];
+
+    console.log(`📦 원본 데이터 총 ${all.length}건`);
+
+    // ✅ 미래 일정만 유지 (오늘 포함)
+    const futureOnly = filterFutureEvents(all);
+    console.log(
+      `📆 오늘 포함 미래 일정: ${futureOnly.length}/${all.length}건 유지`
+    );
+
+    // ✅ Supabase 저장
+    await savePopupsToDB(futureOnly);
+
+    console.log("✅ 자동 업데이트 완료\n");
+  } catch (err) {
+    console.error("🚨 자동 업데이트 오류:", err.message);
+  } finally {
+    isUpdating = false;
+  }
+}
+
+// ─────────────────────────────
+// ✅ 서버 실행
+// ─────────────────────────────
+app.listen(PORT, () => {
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
+
+  // 최초 1회 실행
+  autoUpdatePopups();
+
+  // 10분마다 자동 반복
+  setInterval(autoUpdatePopups, 10 * 60 * 1000);
 });
