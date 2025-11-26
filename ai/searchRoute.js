@@ -63,9 +63,7 @@ router.post("/recommend", async (req, res) => {
 
     /** ✅ 응답: user_memory는 참고용으로만 */
     return res.json({
-      region,
-      keyword,
-      popupCount: dbResults.length,
+      
       text: summary,
       popupResults: dbResults, // ✅ 진짜 추천 결과
       // ✅ 참고용

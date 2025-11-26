@@ -265,7 +265,7 @@ export async function summarizePopups(
   region,
   startDate,
   endDate,
-  userId = "user001" // ✅ userId를 받아서 처리
+  userId = "user001"
 ) {
   // ✅ 유저 메모리 DB에서 불러오기
   const memoryData = await getUserMemory(userId);
@@ -289,28 +289,36 @@ export async function summarizePopups(
     )
     .join("\n");
 
+  function formatKoreanMonthDay(dateString) {
+    const date = new Date(dateString);
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    return `${month}월 ${day}일`;
+  }
+
+  const start = formatKoreanMonthDay(startDate);
+  const end = formatKoreanMonthDay(endDate);
+
+  const text = `요청하신 ${start}부터 ${end}까지 ${region}의 팝업 리스트입니다.`;
+
   const prompt = `
-너는 사용자 맞춤 여행 추천 AI야.
+아래 문장을 그대로 출력하라.
 
-[사용자 이전 기록]
-${userMemoryText}
+${text}
 
-[현재 여행 요청]
-- 지역: ${region}
-- 기간: ${startDate?.toLocaleDateString()} ~ ${endDate?.toLocaleDateString()}
-
-[현재 조회된 팝업 리스트]
-${list}
-
-요청 조건:
-1. 사용자의 과거 기록(지역/키워드/카테고리/빈도)을 적극 반영
-2. 같은 지역/기간이라도 사용자 성향 따라 다른 추천
-3. 말투는 정중한 존댓말
-4. 팝업 목록 나열 금지
-5. 4줄 이내 추천 멘트만 작성
-
-추천 멘트를 작성해줘.
+⚠ 주의:
+- 절대 줄바꿈 문자(\\n)를 포함하지 마라.
+- 절대 따옴표를 붙이지 마라.
+- 다른 문장 추가 금지.
+- 설명 금지.
+- 오직 이 한 문장만 출력.
 `;
 
-  return await getGeminiResponse(prompt);
+  // ✅ Gemini 호출
+  const result = await getGeminiResponse(prompt);
+
+  // ✅ 줄바꿈 제거 + 공백 정리
+  const cleanText = result.replace(/\n/g, "").trim();
+
+  return cleanText;
 }

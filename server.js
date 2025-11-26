@@ -12,6 +12,8 @@ import axios from "axios";
 
 // 수집 유틸 import
 import { fetchNaverNewsPopups } from "./utils/fetchNaverNewsPopups.js";
+import kakaoRoute from "./ai/api/kakaoRoute.js";
+
 import { fetchNaverBlogPopups } from "./utils/fetchNaverBlogPopups.js";
 import { parseFestivalExcel } from "./ai/data/parseFestivalExcel.js";
 import { fetchKCISAEvents } from "./utils/fetchKCISA.js";
@@ -28,6 +30,7 @@ app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 const PORT = process.env.PORT || 8000;
+app.use("/api/kakao", kakaoRoute);
 
 // ==============================
 // 2) 데이터 제공 API
@@ -153,3 +156,4 @@ process.on("uncaughtException", (err) => {
   console.error("❌ Uncaught Exception:", err);
   process.exit(1);
 });
+console.log("✅ Kakao route mounted at /api/kakao");
