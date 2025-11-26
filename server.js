@@ -1,5 +1,7 @@
 // server.js
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config();
+
 import { createClient } from "@supabase/supabase-js";
 import express from "express";
 import searchRoute from "./ai/searchRoute.js";

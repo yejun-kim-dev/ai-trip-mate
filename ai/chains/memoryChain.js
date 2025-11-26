@@ -2,26 +2,20 @@
 import dotenv from "dotenv";
 import path, { dirname } from "path";
 import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// 루트의 .env 불러오기
-dotenv.config({ path: path.resolve(__dirname, "../../.env") });
-
 import { createClient } from "@supabase/supabase-js";
 import { MemorySaver } from "@langchain/langgraph";
 
-// 🔥 기존 SUPABASE_KEY → 네 프로젝트 기준 SUPABASE_SERVICE_KEY 로 변경
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+
+// Supabase 연결
 const client = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// 디버그 로그
-console.log("ENV SUPABASE_URL:", process.env.SUPABASE_URL);
-console.log("ENV SUPABASE_SERVICE_KEY exist?:", !!process.env.SUPABASE_SERVICE_KEY);
-
+// 사용자 메모리 불러오기
 export async function loadUserMemory(userId) {
   const { data } = await client
     .from("user_memory")
@@ -29,24 +23,51 @@ export async function loadUserMemory(userId) {
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (!data) return "사용자 기억 없음";
+  if (!data) {
+    return {
+      preferences: [],
+      intent_history: [],
+      travel_history: [],
+    };
+  }
 
-  const prefs = data.preferences?.join(", ") || "";
-  const intents = data.intent_history?.join(", ") || "";
-  const travel = JSON.stringify(data.travel_history || [], null, 2);
-
-  return `
-[선호도]
-${prefs}
-
-[이전 의도]
-${intents}
-
-[여행 기록]
-${travel}
-`;
+  return data;
 }
 
+// 사용자 검색 내용을 기억에 저장 (업데이트)
+export async function saveUserIntent(
+  userId,
+  message,
+  region,
+  startDate,
+  endDate
+) {
+  const prev = await loadUserMemory(userId);
+
+  const updatedIntent = [...(prev.intent_history || []), message].slice(-20);
+
+  const updatedTravel = [
+    ...(prev.travel_history || []),
+    {
+      message,
+      region,
+      startDate,
+      endDate,
+      created_at: new Date().toISOString(),
+    },
+  ].slice(-50);
+
+  await client.from("user_memory").upsert({
+    user_id: userId,
+    intent_history: updatedIntent,
+    travel_history: updatedTravel,
+    preferences: prev.preferences || [],
+  });
+
+  console.log("🧠 사용자 메모리 업데이트 완료");
+}
+
+// LangChain용 메모리 객체
 export function createChatMemory() {
   return new MemorySaver();
 }
