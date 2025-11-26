@@ -9,6 +9,8 @@ import cors from "cors";
 
 // 수집 유틸 import
 import { fetchNaverNewsPopups } from "./utils/fetchNaverNewsPopups.js";
+import kakaoRoute from "./ai/api/kakaoRoute.js";
+
 import { fetchNaverBlogPopups } from "./utils/fetchNaverBlogPopups.js";
 import { parseFestivalExcel } from "./ai/data/parseFestivalExcel.js";
 import { fetchKCISAEvents } from "./utils/fetchKCISA.js";
@@ -22,6 +24,7 @@ const supabase = createClient(
 
 const app = express();
 app.use(cors());
+app.use("/api/kakao", kakaoRoute);
 app.use(express.json());
 const PORT = process.env.PORT || 1000;
 
@@ -134,3 +137,4 @@ app.listen(PORT, () => {
   autoUpdatePopups();
   setInterval(autoUpdatePopups, 10 * 60 * 1000);
 });
+console.log("✅ Kakao route mounted at /api/kakao");
