@@ -57,3 +57,42 @@ export async function runRetrievalChain(query, userMemoryText = "") {
 
   return results;
 }
+
+// =====================================
+// 🔍 키워드 기반 이벤트 검색 (conversationChain용)
+// =====================================
+export async function searchEventInfo({ keywords = [] }) {
+  console.log("🔍 [searchEventInfo] 키워드:", keywords);
+
+  // 1) Supabase 전체 팝업 가져오기
+  const { data, error } = await supabase
+    .from("popups")
+    .select("*")
+    .limit(100);
+
+  if (error) {
+    console.error("❌ Supabase 오류:", error);
+    return [];
+  }
+
+  if (!data) return [];
+
+  // 2) 키워드 기반 필터링
+  const results = data.filter((p) => {
+    const name = (p.name || "").toLowerCase();
+    const location = (p.location || "").toLowerCase();
+    const category = (p.category || "").toLowerCase();
+
+    return keywords.some((keyword) => {
+      const lowerKeyword = keyword.toLowerCase();
+      return (
+        name.includes(lowerKeyword) ||
+        location.includes(lowerKeyword) ||
+        category.includes(lowerKeyword)
+      );
+    });
+  });
+
+  console.log("➡ searchEventInfo 결과:", results.length);
+  return results.slice(0, 10); // 최대 10개만 반환
+}

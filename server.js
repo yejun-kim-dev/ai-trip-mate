@@ -5,7 +5,10 @@ dotenv.config();
 import { createClient } from "@supabase/supabase-js";
 import express from "express";
 import searchRoute from "./ai/searchRoute.js";
+import apiRouter from "./ai/api/index.js";
 import cors from "cors";
+import https from "https";
+import axios from "axios";
 
 // 수집 유틸 import
 import { fetchNaverNewsPopups } from "./utils/fetchNaverNewsPopups.js";
@@ -22,8 +25,9 @@ const supabase = createClient(
 
 const app = express();
 app.use(cors());
-app.use(express.json());
-const PORT = process.env.PORT || 1000;
+app.use(express.json({ limit: "5mb" }));
+app.use(express.urlencoded({ extended: true, limit: "5mb" }));
+const PORT = process.env.PORT || 8000;
 
 // ==============================
 // 2) 데이터 제공 API
@@ -39,9 +43,6 @@ app.get("/api/events-data", async (req, res) => {
 // ==============================
 // 4) 국가 리스트 API
 // ==============================
-import https from "https";
-import axios from "axios";
-
 app.get("/api/countries", async (req, res) => {
   try {
     const agent = new https.Agent({ rejectUnauthorized: false });
@@ -127,10 +128,28 @@ async function autoUpdatePopups() {
 app.use("/api", searchRoute);
 
 // ==============================
-// 8) 서버 실행
+// 8) 🔥 RAG LangChain 채팅 API 연결
+// ==============================
+app.use("/api", apiRouter);
+
+// ==============================
+// 9) 서버 실행
 // ==============================
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
+  console.log(`📡 API 엔드포인트: http://localhost:${PORT}/api/chat`);
+  console.log(`🔑 Gemini Key: ${process.env.GEMINI_API_KEY ? "✅ 설정됨" : "❌ 없음"}`);
+  console.log(`🗄️ Supabase URL: ${process.env.SUPABASE_URL ? "✅ 설정됨" : "❌ 없음"}`);
   autoUpdatePopups();
   setInterval(autoUpdatePopups, 10 * 60 * 1000);
+});
+
+// 에러 핸들링
+process.on("unhandledRejection", (err) => {
+  console.error("❌ Unhandled Rejection:", err);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("❌ Uncaught Exception:", err);
+  process.exit(1);
 });

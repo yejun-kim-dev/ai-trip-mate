@@ -12,7 +12,7 @@ export default defineConfig({
     port: 5173, // 프론트엔드 실행 포트
     proxy: {
       "/api": {
-        target: "http://localhost:1000", // ✅ 백엔드 서버 주소
+        target: "http://localhost:8000", // ✅ 백엔드 서버 주소 (포트 8000)
         changeOrigin: true,
         secure: false,
       },

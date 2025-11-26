@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
+    "strict": true,
     "composite": true,
-    "module": "ESNext",
+    "module": "Node16",
     "moduleResolution": "node16", // ✅ 이게 핵심입니다
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,

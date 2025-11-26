@@ -12,7 +12,7 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 // Supabase 연결
 const client = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
 );
 
 // 사용자 메모리 불러오기
