@@ -1,5 +1,5 @@
 // ai/chains/saveUserMemory.js
-import { supabase } from "./supabaseClient.js";
+import supabase from "./supabaseClient.js";
 
 export async function saveUserMemory(userId, region, category, keyword) {
   try {
@@ -14,7 +14,9 @@ export async function saveUserMemory(userId, region, category, keyword) {
     };
 
     // 매번 새로 insert (count 없이)
-    const { data, error } = await supabase.from("user_memory").insert([insertData]);
+    const { data, error } = await supabase
+      .from("user_memory")
+      .insert([insertData]);
 
     if (error) {
       console.error("❌ Supabase insert 오류:", error);

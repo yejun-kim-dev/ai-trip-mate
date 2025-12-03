@@ -1,3 +1,10 @@
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 import express from "express";
 import { runRetrievalChain } from "./chains/retrievalChain.js";
 import {
@@ -36,6 +43,11 @@ router.post("/recommend", async (req, res) => {
     /** 2. 팝업 DB 검색 */
     const dbResults = await fetchPopupsFromDB(region, startDate, endDate);
 
+    console.log(
+      "카테고리 샘플:",
+      dbResults.slice(0, 10).map((p) => p.category)
+    );
+
     console.log("✅ 팝업 DB 검색 결과:", dbResults.length);
 
     /** 3. LangChain은 보조용 */
@@ -53,6 +65,36 @@ router.post("/recommend", async (req, res) => {
 
     /** 6. 사용자 메모리 가져오기 */
     const userMemory = await getUserMemory(userId);
+    /** ✅ 7. 추천 결과를 user_trip_items에 자동 저장 */
+
+    // 1. 이전 일정 초기화
+    await supabase.from("user_trip_items").delete().eq("user_id", userId);
+
+    // 2. 추천 결과 없으면 저장 안 함
+    if (dbResults.length > 0) {
+      const tripItems = dbResults.map((popup) => ({
+        user_id: userId,
+        period_start: startDate,
+        period_end: endDate,
+        address: popup.address,
+        open_time: popup.open_time || "10:00",
+        close_time: popup.close_time || "21:00",
+        popup_name: popup.name || popup.title || popup.popup_name,
+        category: popup.category,
+      }));
+
+      const { error: tripInsertError } = await supabase
+        .from("user_trip_items")
+        .insert(tripItems);
+
+      if (tripInsertError) {
+        console.error("❌ user_trip_items 저장 실패:", tripInsertError.message);
+      } else {
+        console.log("✅ user_trip_items 저장 완료:", tripItems.length, "개");
+      }
+    } else {
+      console.log("⚠️ 추천 결과 없음 → 저장 스킵");
+    }
 
     /** 7. Gemini 추천 생성 */
     const summary = await summarizePopups(
@@ -65,7 +107,6 @@ router.post("/recommend", async (req, res) => {
 
     /** ✅ 응답: user_memory는 참고용으로만 */
     return res.json({
-      
       text: summary,
       popupResults: dbResults, // ✅ 진짜 추천 결과
       // ✅ 참고용

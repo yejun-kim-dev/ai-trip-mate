@@ -1,4 +1,4 @@
-import { supabase } from "./supabaseClient.js";
+import supabase from "./supabaseClient.js";
 
 export async function getUserMemory(userId) {
   console.log("📥 [UserMemory] 불러오기 요청:", userId);

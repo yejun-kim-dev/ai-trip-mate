@@ -77,7 +77,7 @@ export default function MakeTrip() {
 
   // ⚡ 여행 생성 버튼 클릭 핸들러
 // ⚡ 여행 생성 버튼 클릭 핸들러
-const handleCreateTrip = () => {
+const handleCreateTrip = async () => {
   if (
     !tripData.country ||
     !tripData.city ||
@@ -93,39 +93,40 @@ const handleCreateTrip = () => {
   setIsLoading(true);
   setErrorMessage("");
 
-  setTimeout(() => {
-    setIsLoading(false);
-
-    const existingTrips = JSON.parse(localStorage.getItem("trips") || "[]");
-
-    // ✅ 날짜 포맷
+  try {
     const formattedStart = formatDate(tripData.dateRange.start);
     const formattedEnd = formatDate(tripData.dateRange.end);
 
-    // ✅ 여행명, 기간, 동행자
-    const tripTitle = `${tripData.country} ${tripData.city} 여행`;
-    const tripPeriod = `${formattedStart} ~ ${formattedEnd}`;
-    const companionText = getCompanionSummary(tripData.companions);
-
-    // ✅ 새로운 여행 데이터
-    const newTrip = {
-      id: Date.now(),
-      country: tripData.country,
-      city: tripData.city,
-      dateRange: {
-        start: formattedStart,
-        end: formattedEnd,
-        text: `${formattedStart} ~ ${formattedEnd}`,
+    const response = await fetch("http://localhost:8000/api/trips/create", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-      companions: tripData.companions,
-      imageUrl: "/default-trip-image.jpg",
-    };
+      body: JSON.stringify({
+        userId: "user001", // 로그인 생기면 바꾸면 됨
+        country: tripData.country,
+        city: tripData.city,
+        startDate: formattedStart,
+        endDate: formattedEnd,
+        companions: tripData.companions,
+      }),
+    });
 
-    localStorage.setItem("trips", JSON.stringify([...existingTrips, newTrip]));
-    navigate("/mytrip", { state: { tripData: newTrip } });
-  }, 1000);
+    const data = await response.json();
+
+    if (!data.trip) {
+      throw new Error("여행 생성 실패");
+    }
+
+    navigate("/mytrip", { state: { tripData: data.trip } });
+
+  } catch (err) {
+    console.error(err);
+    setErrorMessage("여행 생성 중 오류 발생");
+  } finally {
+    setIsLoading(false);
+  }
 };
-
   return (
     <div className="min-h-screen bg-[#FFFDFD] flex flex-col max-w-md mx-auto relative pb-[100px]">
       {/* ✅ 헤더 */}

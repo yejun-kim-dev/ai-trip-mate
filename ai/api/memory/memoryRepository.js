@@ -1,5 +1,5 @@
 // ai/api/memory/memoryRepository.js
-import { supabase } from "./supabaseClient.js";
+import supabase from "../../chains/supabaseClient.js";
 import { UserMemory } from "./memoryModels.js";
 
 // 사용자 메모리 불러오기
@@ -25,20 +25,18 @@ export async function loadMemory(userId) {
 
 // 사용자 메모리 저장
 export async function saveMemory(memory) {
-  const { error } = await supabase
-    .from("user_memory")
-    .upsert(
-      [
-        {
-          user_id: memory.userId,
-          travel_history: memory.travelHistory,
-          preferences: memory.preferences,
-          intent_history: memory.intentHistory,
-          last_updated: new Date(),
-        },
-      ],
-      { onConflict: ["user_id"] } // ✅ 매우 중요!
-    );
+  const { error } = await supabase.from("user_memory").upsert(
+    [
+      {
+        user_id: memory.userId,
+        travel_history: memory.travelHistory,
+        preferences: memory.preferences,
+        intent_history: memory.intentHistory,
+        last_updated: new Date(),
+      },
+    ],
+    { onConflict: ["user_id"] } // ✅ 매우 중요!
+  );
 
   if (error) console.error("❌ Supabase 저장 오류:", error);
   else console.log("✅ Supabase 저장 완료:", memory.userId);
