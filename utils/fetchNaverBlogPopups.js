@@ -16,7 +16,7 @@ import {
 export async function fetchNaverBlogPopups() {
   console.log("📡 네이버 블로그 팝업 수집 시작...");
 
-  const query = "팝업스토어 OR 팝업 OR 전시 OR 행사";
+  const query = "팝업스토어 OR 팝업 OR 행사";
 
   const allResults = [];
 

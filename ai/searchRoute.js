@@ -10,6 +10,7 @@ import { saveUserMemory } from "./chains/saveUserMemory.js";
 import { getUserMemory } from "./chains/getUserMemory.js";
 import { logUserRequest } from "./chains/logUserRequest.js";
 import { extractKeyword } from "../utils/extractKeyword.js";
+import { deriveCategoryFromDb, resolvePopupCategory } from "./utils/categoryUtils.js";
 
 const router = express.Router();
 
@@ -47,7 +48,8 @@ router.post("/recommend", async (req, res) => {
     await logUserRequest(userId, message, region);
 
     /** 5. 유저 취향 누적용 메모리 업데이트 */
-    await saveUserMemory(userId, region, "팝업", keyword);
+    const memoryCategory = deriveCategoryFromDb(dbResults);
+    await saveUserMemory(userId, region, memoryCategory, keyword);
 
     /** 6. 사용자 메모리 가져오기 */
     const userMemory = await getUserMemory(userId);
