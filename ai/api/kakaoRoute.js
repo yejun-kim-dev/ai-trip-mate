@@ -5,6 +5,7 @@ const router = express.Router();
 
 router.get("/restaurants", async (req, res) => {
   const { lat, lng } = req.query;
+  console.log("🔥 카카오 키 확인:", process.env.KAKAO_REST_API_KEY);
 
   try {
     const response = await axios.get(

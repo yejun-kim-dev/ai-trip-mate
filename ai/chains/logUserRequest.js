@@ -1,5 +1,5 @@
 // ai/chains/logUserRequest.js
-import { supabase } from "./supabaseClient.js";
+import supabase from "./supabaseClient.js";
 
 export async function logUserRequest(userId, message, region) {
   try {

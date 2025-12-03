@@ -1,4 +1,4 @@
-import { supabase } from "./supabaseClient.js";
+import supabase from "../../chains/supabaseClient.js";
 import { loadMemory, saveMemory } from "./memoryRepository.js";
 
 export async function updateMemory(userId, newData) {
@@ -26,7 +26,8 @@ export async function updateMemory(userId, newData) {
   const existingIndex = memory.travelHistory.findIndex(
     (t) =>
       t.city === newRecord.city &&
-      JSON.stringify(t.brandOrKeyword) === JSON.stringify(newRecord.brandOrKeyword)
+      JSON.stringify(t.brandOrKeyword) ===
+        JSON.stringify(newRecord.brandOrKeyword)
   );
 
   if (existingIndex !== -1) {
@@ -34,8 +35,12 @@ export async function updateMemory(userId, newData) {
     const existing = memory.travelHistory[existingIndex];
     existing.count = (existing.count || 1) + 1;
     existing.dateRange = newRecord.dateRange || existing.dateRange;
-    existing.companions = Array.from(new Set([...existing.companions, ...newRecord.companions]));
-    existing.categories = Array.from(new Set([...existing.categories, ...newRecord.categories]));
+    existing.companions = Array.from(
+      new Set([...existing.companions, ...newRecord.companions])
+    );
+    existing.categories = Array.from(
+      new Set([...existing.categories, ...newRecord.categories])
+    );
     existing.intent = newRecord.intent || existing.intent;
     memory.travelHistory[existingIndex] = existing;
   } else {
@@ -62,16 +67,21 @@ export async function updateMemory(userId, newData) {
     .single();
 
   const merged = existingData?.travel_history
-    ? [...existingData.travel_history, ...memory.travelHistory].reduce((acc, curr) => {
-        const key = `${curr.city}-${curr.brandOrKeyword}`;
-        const existing = acc.find((i) => `${i.city}-${i.brandOrKeyword}` === key);
-        if (existing) {
-          existing.count = (existing.count || 1) + (curr.count || 1);
-        } else {
-          acc.push(curr);
-        }
-        return acc;
-      }, [])
+    ? [...existingData.travel_history, ...memory.travelHistory].reduce(
+        (acc, curr) => {
+          const key = `${curr.city}-${curr.brandOrKeyword}`;
+          const existing = acc.find(
+            (i) => `${i.city}-${i.brandOrKeyword}` === key
+          );
+          if (existing) {
+            existing.count = (existing.count || 1) + (curr.count || 1);
+          } else {
+            acc.push(curr);
+          }
+          return acc;
+        },
+        []
+      )
     : memory.travelHistory;
 
   memory.travelHistory = merged;
