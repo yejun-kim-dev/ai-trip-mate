@@ -163,16 +163,16 @@ const ChatbotPage: React.FC = () => {
   try {
     // 4️⃣ 서버 호출 (Vite 프록시 사용)
     const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: "test-user",   // 실제 userId 넣거나 state에서 전달
-        message: msg,
-        tripData: sanitizedTripData,
-        excludedTitles: excludedTitles, // 이미 제시한 행사 제목 목록
-        conversationContext: conversationContext, // 이전 대화 맥락
-      }),
-    });
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userId: "test001",
+    message: msg,
+    tripData: sanitizedTripData,
+    excludedTitles: excludedTitles, 
+    conversationContext: conversationContext,
+  }),
+});
 
     // 3️⃣ HTTP 상태코드 에러 처리
     if (!res.ok) {

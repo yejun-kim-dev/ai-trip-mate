@@ -6,6 +6,7 @@ import SelectCountry from "../component/SelectCountry";
 import SelectCity from "../component/SelectCity";
 import SelectDate from "../component/SelectDate";
 import TripCompanion from "../component/SelectCompanion";
+import defaultTripImg from "../component/images/tripbasicimage.png";
 
 interface Companions {
   [key: string]: number;
@@ -97,7 +98,7 @@ const handleCreateTrip = async () => {
     const formattedStart = formatDate(tripData.dateRange.start);
     const formattedEnd = formatDate(tripData.dateRange.end);
 
-    const response = await fetch("http://localhost:8000/api/trips/create", {
+    const response = await fetch("http://localhost:8000/api/trip/create", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -117,8 +118,31 @@ const handleCreateTrip = async () => {
     if (!data.trip) {
       throw new Error("여행 생성 실패");
     }
+    // 1) 기존 trips 불러오기
+const existingTrips = JSON.parse(localStorage.getItem("trips") || "[]");
 
-    navigate("/mytrip", { state: { tripData: data.trip } });
+// 2) 새 여행에 기본 이미지 붙여주기
+const newTrip = {
+  ...data.trip,
+  imageUrl: defaultTripImg,  // 없으면 기본 이미지
+};
+
+// 3) trips 배열에 추가해서 저장
+existingTrips.push(newTrip);
+localStorage.setItem("trips", JSON.stringify(existingTrips));
+
+// 4) MyTrip 페이지로 이동
+navigate("/mytrip", { state: { tripData: newTrip } });
+
+
+    navigate("/mytrip", { 
+  state: { 
+    tripData: {
+      ...data.trip,
+      imageUrl: defaultTripImg
+    }
+  } 
+});
 
   } catch (err) {
     console.error(err);

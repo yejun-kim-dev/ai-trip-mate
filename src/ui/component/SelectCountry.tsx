@@ -20,9 +20,36 @@ export default function SelectCountry({ setTripData, onClose }: any) {
         return res.json();
       })
       .then((data) => {
-        setCountries(data);
-        setLoading(false);
-      })
+        // ⭐ 한국을 최상단으로 정렬
+        const sorted = data.sort((a, b) => a.name.localeCompare(b.name, "ko-KR"));
+      
+        // 🇰🇷 한국 이름 후보들
+  const koreaNames = [
+    "대한민국",
+    "한국",
+    "South Korea",
+    "Republic of Korea",
+    "Korea, Republic of"
+  ];
+
+  // 🇰🇷 한국 찾기 (띄어쓰기 제거 후 비교)
+  const korea = sorted.find((c) =>
+    koreaNames.some((name) =>
+      c.name.replace(/\s+/g, "").includes(name.replace(/\s+/g, ""))
+    )
+  );
+
+  const others = sorted.filter(
+    (c) =>
+      !koreaNames.some((name) =>
+        c.name.replace(/\s+/g, "").includes(name.replace(/\s+/g, ""))
+      )
+  );
+
+  setCountries(korea ? [korea, ...others] : sorted);
+  setLoading(false);
+})
+      
       .catch((err) => {
         console.error("❌ 국가 API 불러오기 실패:", err);
         setError("국가 정보를 불러오지 못했습니다.");
@@ -49,7 +76,7 @@ export default function SelectCountry({ setTripData, onClose }: any) {
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="text-[#8B8B8B] mr-2"
+          className="text-[#606060] mr-2"
         >
           <circle cx="11" cy="11" r="8"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -59,7 +86,7 @@ export default function SelectCountry({ setTripData, onClose }: any) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="여행 국가 검색"
-          className="w-full py-1 pl-2 rounded-[10px] border-none text-[14px] focus:ring-0 focus:border-transparent focus:outline-none bg-transparent"
+          className="w-full py-1 pl-2 rounded-[10px] border-none text-[14px] text-[#4B4B4B] focus:ring-0 focus:border-transparent focus:outline-none bg-transparent"
         />
       </div>
 

@@ -59,7 +59,8 @@ export async function fetchNaverBlogPopups() {
 
         // 4) 위치 추출 + 정제
         const rawPlace = extractPlaceName(fullText);
-        const location = rawPlace || "전국";
+        const location = rawPlace ? rawPlace : null;   // 전국 제거
+
 
         allResults.push({
           category: "팝업",

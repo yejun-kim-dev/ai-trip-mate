@@ -40,6 +40,31 @@ app.post("/api/optimize-route", optimizeRoute);
 app.use("/api/trip", tripOptimizerRoute);
 const PORT = process.env.PORT || 8000;
 app.use("/api/kakao", kakaoRoute);
+app.post("/api/trip/create", async (req, res) => {
+  try {
+    const { userId, country, city, startDate, endDate, companions } = req.body;
+
+    // trip 구조
+    const trip = {
+      id: Date.now(),
+      userId,
+      country,
+      city,
+      startDate,
+      endDate,
+      companions,
+      created_at: new Date().toISOString(),
+    };
+
+    return res.json({
+      ok: true,
+      trip,
+    });
+  } catch (err) {
+    console.error("❌ trip create error:", err);
+    res.status(500).json({ error: "여행 생성 실패" });
+  }
+});
 
 // ==============================
 // 2) 데이터 제공 API

@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 // ✅ 1. 'TripState' 타입과 'defaultTrips'를 data 파일에서 가져옵니다.
 import { defaultTrips, TripState } from "../component/data/dummyTrips";
 import chatbotIcon from "../component/images/chatbot_icon.png";
+import defaultTripImg from "../component/images/tripbasicimage.png";
+
 // ❌ 2. 개별 이미지는 import할 필요 없습니다. (dummyTrips에 URL이 포함되어 있음)
 // import tripimage_sampleImg from "../component/images/tripimage_sample.jpg";
 // import tripbox_sampleImg from "../component/images/tripbox_sample.jpg";
@@ -119,10 +121,7 @@ export default function Home() {
             >
               {/* 배경 이미지 */}
               <img
-                src={
-                  trip.imageUrl ||
-                  "https://placehold.co/600x400/319CE5/FFF?text=My+Trip"
-                }
+                src={trip.imageUrl || defaultTripImg}
                 alt={`${trip.city} 여행`}
                 className="absolute inset-0 w-full h-full object-cover"
               />
