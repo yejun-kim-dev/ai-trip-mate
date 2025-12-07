@@ -36,7 +36,11 @@ router.post("/", async (req, res) => {
 
     // 📌 3) LLM 실행
     const chain = await createConversationChain(userId);
-    const aiText = await chain.invoke({ message });
+    const aiText = await chain.invoke({
+  message,
+  chat_history: req.body.chat_history || []
+});
+
 
     // -------------------------------------------------------
     // 🔥 4) 파싱된 검색 조건 (지역 / 날짜 / 카테고리)

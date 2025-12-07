@@ -20,8 +20,104 @@ import tripOptimizerRoute from "./tripOptimizerRoute.js";
 import { addTripItem } from "./api/addTripItem.js";
 
 // 크롤러 및 데이터 수집 util
-import { fetchNaverNewsPopups } from "../utils/fetchNaverNewsPopups.js";
+import * as xml2js from "xml2js";
+import { extractPlaceName } from "../utils/locationExtractor.js";
 import { fetchNaverBlogPopups } from "../utils/fetchNaverBlogPopups.js";
+
+
+// -------------------------
+// 1) 행사명 패턴 정의
+// -------------------------
+const EVENT_NAME_PATTERNS = [
+  /(.*?)팝업스토어/g,
+  /(.*?)팝업/g,
+  /(.*?)전시회/g,
+  /(.*?)전시/g,
+  /(.*?)공연/g,
+  /(.*?)콘서트/g,
+  /(.*?)뮤지컬/g,
+  /(.*?)페스티벌/g,
+];
+
+// -------------------------
+// 2) GOOGLE NEWS RSS URLS
+// -------------------------
+const RSS_URLS = [
+  "https://news.google.com/rss/search?q=팝업&hl=ko&gl=KR&ceid=KR:ko",
+  "https://news.google.com/rss/search?q=전시&hl=ko&gl=KR&ceid=KR:ko",
+  "https://news.google.com/rss/search?q=공연&hl=ko&gl=KR&ceid=KR:ko",
+  "https://news.google.com/rss/search?q=축제&hl=ko&gl=KR&ceid=KR:ko",
+];
+
+// -------------------------
+export async function fetchGoogleNewsPopups() {
+  const parser = new xml2js.Parser();
+  let results = [];
+
+  for (const url of RSS_URLS) {
+    try {
+      const { data } = await axios.get(url, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        timeout: 15000,
+      });
+
+      const parsed = await parser.parseStringPromise(data);
+      const items = parsed?.rss?.channel?.[0]?.item || [];
+
+      for (const item of items) {
+        const title = item.title?.[0] || "";
+        const description = item.description?.[0] || "";
+        const merged = `${title} ${description}`;
+
+        // 1) 행사명 추출
+        const eventName = extractEventName(merged);
+        if (!eventName) continue;
+
+        // 2) 위치 추출 (없으면 전국)
+        const location =
+          extractPlaceName(merged) ||
+          extractPlaceName(title) ||
+          extractPlaceName(description) ||
+          "전국";
+
+        // 3) 기간은 RSS에 없음 → null
+        const period = null;
+
+        // 4) 결과 추가
+        results.push({
+          category: "뉴스",
+          name: eventName,
+          location,
+          period,
+          hours: null,
+          source: "GoogleNewsRSS",
+          url: item.link?.[0] || null,
+        });
+      }
+    } catch (err) {
+      console.error("❌ RSS fetch error:", err.message);
+    }
+  }
+
+  console.log(`📰 뉴스 기반 행사 수집: ${results.length}건`);
+  return results;
+}
+
+// -------------------------
+// 🎯 행사명 추출 함수
+// -------------------------
+function extractEventName(text) {
+  for (const pattern of EVENT_NAME_PATTERNS) {
+    const match = pattern.exec(text);
+    if (match && match[0]) return cleanEventName(match[0]);
+  }
+  return null;
+}
+
+function cleanEventName(name) {
+  return name.replace(/\s{2,}/g, " ").trim();
+}
+
 import { fetchKCISAEvents } from "../utils/fetchKCISA.js";
 import { fetchKCISASpecial } from "../utils/fetchKCISASpecial.js";
 
@@ -203,23 +299,36 @@ function filterFutureEvents(list) {
 }
 
 async function savePopupsToDB(data) {
-  const unique = Array.from(
-    new Map(data.map((p) => [p.url, p])).values()
-  ).map((p) => ({
-    ...p,
-    updated_at: new Date().toISOString(),
-  }));
+    const buildKey = (p) =>
+    `${p.name || ""}|${p.location || ""}|${p.period || ""}|${p.category || ""}`;
 
-  console.log(`📦 DB 저장 시작 — 총 ${unique.length}개`);
+  // 2) 같은 배치 안에서만 중복 제거
+  const deduped = Array.from(
+    new Map(
+      data.map((p) => {
+        const key = buildKey(p);
+        return [
+          key,
+          {
+            ...p,
+            unique_key: key,                            // 원하면 컬럼에 같이 저장
+            updated_at: new Date().toISOString(),
+          },
+        ];
+      })
+    ).values()
+  );
 
-  const { error } = await supabase.from("popups").upsert(unique, {
-    onConflict: "url",
-  });
+  console.log(`📦 DB 저장 시작 — 중복 제거 후 총 ${deduped.length}개`);
 
-  if (error) console.error("❌ Supabase 저장 실패:", error.message);
-  else console.log("✅ Supabase 저장 완료");
+  const { error } = await supabase.from("popups").insert(deduped);
+
+  if (error) {
+    console.error("❌ Supabase 저장 실패:", error.message);
+  } else {
+    console.log("✅ Supabase 저장 완료");
+  }
 }
-
 let isUpdating = false;
 
 async function autoUpdatePopups() {
@@ -230,7 +339,7 @@ async function autoUpdatePopups() {
 
   try {
     const [news, blog, kcisa, special, daegu] = await Promise.allSettled([
-      fetchNaverNewsPopups(),
+      fetchGoogleNewsPopups(),
       fetchNaverBlogPopups(),
       fetchKCISAEvents(),
       fetchKCISASpecial(),

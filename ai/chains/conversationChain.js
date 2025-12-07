@@ -13,9 +13,11 @@ export async function createConversationChain(userId) {
   const llm = createLLM();
 
   const prompt = ChatPromptTemplate.fromMessages([
-    ["system", "{system}"],
-    ["user", "{input}"],
-  ]);
+  ["system", "{system}"],
+  ["placeholder", "{chat_history}"],
+  ["user", "{input}"],
+]);
+
 
   return RunnableSequence.from([
 
@@ -77,9 +79,10 @@ export async function createConversationChain(userId) {
         system: `
 당신은 AI 여행 도우미입니다.
 
-❗ 절대 지켜야 할 규칙:
-1. text 응답에는 행사 정보(제목/기간/장소)를 절대 포함하지 마세요.
-2. 행사 정보는 서버가 recommendations로 보내므로 text에는 안내 문장만 작성합니다.
+❗ 지켜야 할 규칙:
+1. [사용자 기억]에 기록된 여행 지역, 관심 카테고리, 브랜드, 동행인 정보를 적극 활용하여 
+   “지난번에 ~에도 관심이 있으셨죠”, “최근에 ~을 자주 찾았던 것처럼” 같은 문장을 반드시 포함하세요.
+2. 행사 정보는 서버가 recommendations로 보내므로 text에는 질문에 대한 간단한 답 문장을 작성합니다.
 3. 검색 결과가 없어도 "있습니다/없습니다" 같은 단정 표현 금지. 자연스럽게 설명만.
 4. 팝업/전시/공연 등 사용자가 언급한 카테고리로 답변의 맥락을 유지하세요.
 
@@ -91,7 +94,8 @@ ${parsedInfo}
 [참고용 행사 목록 — 절대 응답에 포함 금지]
 ${eventListForLLM}
         `,
-        input: input.message,
+        chat_history: input.chat_history || [],
+        input: input.message
       };
     }),
 
