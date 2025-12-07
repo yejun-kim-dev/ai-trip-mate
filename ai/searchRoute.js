@@ -17,7 +17,7 @@ import { saveUserMemory } from "./chains/saveUserMemory.js";
 import { getUserMemory } from "./chains/getUserMemory.js";
 import { logUserRequest } from "./chains/logUserRequest.js";
 import { extractKeyword } from "../utils/extractKeyword.js";
-import { deriveCategoryFromDb, resolvePopupCategory } from "./utils/categoryUtils.js";
+import { deriveCategoryFromDb, resolvePopupCategory } from "../utils/categoryUtils.js";
 
 const router = express.Router();
 

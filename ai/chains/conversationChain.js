@@ -23,7 +23,10 @@ export async function createConversationChain(userId) {
       const memoryData = await loadUserMemory(userId);
 
       const memoryText = memoryData
-        ? `과거 여행 기록: ${JSON.stringify(memoryData.travel_history || [], null, 2)}\n선호 카테고리: ${(memoryData.preferences || []).join(", ")}`
+        ? `과거 여행 기록: ${JSON.stringify(memoryData.travel_history || [], null, 2)}\n선호 카테고리: ${// 배열이면 합치고, 문자열이면 그대로 쓰고, 없으면 빈 문자열 반환
+          Array.isArray(memoryData.preferences) 
+            ? memoryData.preferences.join(", ") 
+            : (memoryData.preferences || "")}`
         : "과거 여행 기록이 없습니다.";
 
       const parsed = parseUserQuery(input.message);
