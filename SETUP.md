@@ -1,6 +1,7 @@
 # AI Trip Mate - 백엔드 연결 가이드
 
 ## 📋 개요
+
 RAG LangChain 기반 채팅 기능을 프론트엔드와 연결하기 위한 설정 가이드입니다.
 
 ## 🔧 필요한 환경 변수
@@ -23,14 +24,17 @@ PORT=8000
 ## 🚀 서버 실행 방법
 
 ### 1. 의존성 설치
+
 ```bash
 npm install
 ```
 
 ### 2. 환경 변수 설정
+
 `.env` 파일을 생성하고 위의 환경 변수들을 설정하세요.
 
 ### 3. 서버 실행
+
 ```bash
 npm run server
 ```
@@ -40,11 +44,12 @@ npm run server
 ## 📡 API 엔드포인트
 
 ### 채팅 API
+
 - **URL**: `POST http://localhost:8000/api/chat`
 - **요청 본문**:
   ```json
   {
-    "userId": "test-user",
+    "userId": "user001",
     "message": "서울에서 3월 1일부터 3월 3일까지 팝업 추천해줘",
     "tripData": {
       "city": "서울",
@@ -98,6 +103,7 @@ server.js                # 메인 서버 파일 (포트 3001)
 ## ⚠️ 주의사항
 
 1. **Supabase 키**: `SUPABASE_SERVICE_ROLE_KEY`와 `SUPABASE_KEY`는 다른 키입니다.
+
    - `SUPABASE_SERVICE_ROLE_KEY`: 서버 사이드 작업용 (server.js)
    - `SUPABASE_KEY`: 클라이언트 사이드 작업용 (retrievalChain.js)
 
@@ -108,17 +114,19 @@ server.js                # 메인 서버 파일 (포트 3001)
 ## 🐛 문제 해결
 
 ### 서버가 시작되지 않는 경우
+
 - `.env` 파일이 올바른 위치에 있는지 확인
 - 필요한 환경 변수가 모두 설정되었는지 확인
 - 포트가 이미 사용 중인지 확인 (`netstat -ano | findstr :8000`)
 
 ### API 요청 실패
+
 - CORS 설정 확인 (이미 `cors()` 미들웨어 적용됨)
 - 서버 로그에서 에러 메시지 확인
 - 환경 변수 (특히 GEMINI_API_KEY) 확인
 
 ### 추천이 나오지 않는 경우
+
 - Supabase 연결 확인
 - `popups` 테이블에 데이터가 있는지 확인
 - 메시지에서 지역/날짜가 올바르게 파싱되는지 확인
-

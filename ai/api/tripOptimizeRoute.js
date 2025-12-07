@@ -1,130 +1,132 @@
-// ai/api/tripOptimizeRoute.js
+// src/ai/api/tripOptimizeRoute.js
 import express from "express";
+import { fetchUserTripItems } from "./services/tripService.js";
+import { allocateDates } from "../utils/allocateDates.js";
+import { strToDate, dateToStr } from "../utils/dateUtils.js";
 
 const router = express.Router();
 
-// ✅ 거리 계산 함수
-function getDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+/** 카테고리 헬퍼 */
+const IS_POPUP = (item) => item.category === "관광";
+const IS_FOOD = (item) => item.category === "식당";
+const IS_HOTEL = (item) => item.category === "숙박";
 
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // km
+/** 2박 3일용 날짜 리스트 만들기 */
+function buildThreeDays(tripStart) {
+  const start = strToDate(tripStart);
+  const days = [];
+  for (let i = 0; i < 3; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    days.push(dateToStr(d)); // "2025-12-24" 같은 문자열
+  }
+  return days;
 }
 
-// ✅ 영업시간 체크 함수
-function isOpen(place, currentTime) {
-  // open_time, close_time 이 null이면 그냥 통과
-  if (!place.open_time || !place.close_time) return true;
-
-  const toNum = (t) => parseInt(t.replace(":", ""), 10);
-
-  const now = toNum(currentTime); // "1100" 이런 식
-  const open = toNum(place.open_time);
-  const close = toNum(place.close_time);
-
-  return now >= open && now <= close;
-}
-
-// ✅ 핵심: 정렬 함수
-function optimizeRoute(places) {
-  if (places.length === 0) return [];
-
-  let current = places[0]; // 시작점을 일단 첫 장소로
-  let currentTime = "11:00"; // 기본 시작 시간
-  const remaining = [...places];
+/** 식당과 팝업을 섞어서 하나의 하루 리스트로 만들기 */
+function mergeRestaurantsAndPopups(restaurants, popups) {
   const result = [];
+  let r = 0;
+  let p = 0;
 
-  while (remaining.length > 0) {
-    // 아직 방문 안 한 곳 중에서,
-    // 지금 시간에 열려 있고, 가장 가까운 곳을 찾기
-    let nextIndex = -1;
-    let bestDist = Infinity;
+  // 간단한 규칙:
+  // 식당 하나 → 팝업 하나 → 팝업 하나 → 식당 하나 → 팝업 하나 → ...
+  while (r < restaurants.length || p < popups.length) {
+    if (r < restaurants.length) {
+      result.push(restaurants[r++]);
+    }
+    if (p < popups.length) {
+      result.push(popups[p++]);
+    }
+    if (p < popups.length) {
+      result.push(popups[p++]);
+    }
+  }
 
-    remaining.forEach((p, idx) => {
-      if (!isOpen(p, currentTime)) return;
-
-      const dist = getDistance(
-        current.latitude,
-        current.longitude,
-        p.latitude,
-        p.longitude
-      );
-
-      if (dist < bestDist) {
-        bestDist = dist;
-        nextIndex = idx;
-      }
-    });
-
-    // 만약 영업시간 때문에 갈 수 있는 곳이 없으면,
-    // 그냥 남은 것 중 첫 번째로 간다
-    if (nextIndex === -1) nextIndex = 0;
-
-    const next = remaining.splice(nextIndex, 1)[0];
-
-    result.push(next);
-    current = next;
-
-    // 대충 1시간 지나간 걸로 치기 (이동+체류 시간)
-    // 진짜로 시간 계산 정확히 하고 싶으면 나중에 개선
-    const [h, m] = currentTime.split(":").map(Number);
-    const newMinutes = h * 60 + m + 60;
-    const newH = Math.floor(newMinutes / 60);
-    const newM = newMinutes % 60;
-    currentTime = `${String(newH).padStart(2, "0")}:${String(newM).padStart(
-      2,
-      "0"
-    )}`;
+  // 남은 팝업이 있으면 뒤에 붙이기
+  while (p < popups.length) {
+    result.push(popups[p++]);
   }
 
   return result;
 }
 
-// ✅ 이게 바로 /api/trips/:tripId/optimize 에 대응되는 부분
-router.get("/:tripId/optimize", async (req, res) => {
-  const { tripId } = req.params;
+/** 하루 리스트에 visit_order랑 visit_date 달아주기 */
+function applyVisitOrderAndDate(list, dateStr) {
+  return list.map((item, idx) => ({
+    ...item,
+    visit_date: dateStr,
+    visit_order: idx + 1,
+  }));
+}
 
+router.post("/optimize-trip", async (req, res) => {
   try {
-    // supabase는 server.js에서 import 해서 넘겨줘도 되고,
-    // 여기서 다시 createClient 해도 됨 (지금은 설명용)
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    const { userId, tripStart, tripEnd } = req.body;
 
-    // 1) 이 여행에 속한 장소들 모두 가져오기
-    const { data, error } = await supabase
-      .from("user_trip_items")
-      .select("*")
-      .eq("trip_id", tripId);
+    // 시연용: 무조건 2박 3일이라고 가정
+    const days = buildThreeDays(tripStart); // [day1, day2, day3]
+    const firstDay = days[0];
+    const lastDay = days[2];
 
-    if (error) {
-      console.error("❌ user_trip_items 조회 에러:", error);
-      return res.status(500).json({ error: "DB 조회 실패" });
+    // 1. DB에서 전체 아이템 가져오기
+    const items = await fetchUserTripItems(userId, tripStart, tripEnd);
+
+    // 2. 카테고리별로 분리
+    const popups = items.filter(IS_POPUP);
+    const foods = items.filter(IS_FOOD);
+    const hotels = items.filter(IS_HOTEL);
+
+    // 3. 팝업을 날짜별로 균등 분배 (period_start/period_end 범위 고려)
+    const popupByDate = allocateDates(popups, tripStart, tripEnd);
+
+    // 4. 식당/숙박은 기존 visit_date 기준으로 날짜별 분리
+    const foodByDate = {};
+    const hotelByDate = {};
+
+    for (const day of days) {
+      foodByDate[day] = [];
+      hotelByDate[day] = [];
     }
 
-    if (!data || data.length === 0) {
-      return res.json({ optimizedRoute: [] });
+    for (const f of foods) {
+      const d = f.visit_date || firstDay; // visit_date가 없으면 첫째날로
+      if (!foodByDate[d]) foodByDate[d] = [];
+      foodByDate[d].push(f);
     }
 
-    // 2) 거리 + 영업시간 기준으로 최적 정렬
-    const route = optimizeRoute(data);
+    for (const h of hotels) {
+      const d = h.visit_date || firstDay;
+      if (!hotelByDate[d]) hotelByDate[d] = [];
+      hotelByDate[d].push(h);
+    }
 
-    // 3) 프론트로 결과 보내주기
-    return res.json({ optimizedRoute: route });
-  } catch (e) {
-    console.error("❌ 최적화 API 에러:", e);
-    return res.status(500).json({ error: "서버 에러" });
+    // 5. 날짜별 최종 스케줄 구성
+    const route = {};
+
+    for (const day of days) {
+      const dayFoods = foodByDate[day] || [];
+      const dayPopups = popupByDate[day] || [];
+      const dayHotels = hotelByDate[day] || [];
+
+      // 5-1. 식당 + 팝업 섞기
+      let dayList = mergeRestaurantsAndPopups(dayFoods, dayPopups);
+
+      // 5-2. 숙박은 항상 마지막 (마지막 날은 시연용으로 제외하고 싶으면 조건)
+      if (day !== lastDay) {
+        for (const h of dayHotels) {
+          dayList.push(h);
+        }
+      }
+
+      // 5-3. visit_order, visit_date 세팅
+      route[day] = applyVisitOrderAndDate(dayList, day);
+    }
+
+    return res.json({ ok: true, route });
+  } catch (err) {
+    console.error("❌ optimize-trip error:", err);
+    return res.status(500).json({ ok: false, error: "Internal server error" });
   }
 });
 
