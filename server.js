@@ -1,8 +1,6 @@
 // server.js
 import dotenv from "dotenv";
 dotenv.config();
-
-import { createClient } from "@supabase/supabase-js";
 import { optimizeRoute } from "./ai/api/optimizeRoute.js";
 import express from "express";
 import searchRoute from "./ai/searchRoute.js";
@@ -11,31 +9,158 @@ import cors from "cors";
 import https from "https";
 import { addTripItem } from "./ai/api/addTripItem.js";
 
-import axios from "axios";
-
 // 수집 유틸 import
 import { fetchNaverNewsPopups } from "./utils/fetchNaverNewsPopups.js";
 import kakaoRoute from "./ai/api/kakaoRoute.js";
 import tripOptimizerRoute from "./ai/tripOptimizerRoute.js";
 import { fetchNaverBlogPopups } from "./utils/fetchNaverBlogPopups.js";
 import { parseFestivalExcel } from "./ai/data/parseFestivalExcel.js";
-import { optimizeMultipleDays } from "./ai/services/tripService.js";
 import { fetchKCISAEvents } from "./utils/fetchKCISA.js";
 import { fetchKCISASpecial } from "./utils/fetchKCISASpecial.js";
-import { fetchDaeguEvents } from "./ai/data/fetchDaeguEvents.js";
+import { fetchDaeguEvents } from "./ai/data/fetchDaeguEvents.js"; // ==========================
+// 📌 최종 일정 생성 API
+// ==========================
+import {
+  fetchUserTripItems,
+  optimizeWithFixedStops,
+  buildFinalTrip,
+} from "./ai/services/tripService.js";
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// 더미 식당 / 숙소 불러오기
+import dummyRestaurants from "./ai/data/dummyRestaurants.js";
+import dummyHotels from "./ai/data/dummyHotels.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
-app.post("/api/add-trip-item", addTripItem);
+import axios from "axios";
+import supabase from "./ai/chains/supabaseClient.js";
+
+const KAKAO_KEY = process.env.KAKAO_REST_API_KEY;
+
+// 🔹 주소 → 위도/경도 변환
+async function geocode(address) {
+  try {
+    const url = "https://dapi.kakao.com/v2/local/search/address.json";
+    const { data } = await axios.get(url, {
+      params: { query: address },
+      headers: { Authorization: `KakaoAK ${KAKAO_KEY}` },
+    });
+
+    if (data.documents.length === 0) return null;
+
+    return {
+      lat: parseFloat(data.documents[0].y),
+      lng: parseFloat(data.documents[0].x),
+    };
+  } catch (err) {
+    console.error("카카오 지오코딩 실패:", err);
+    return null;
+  }
+}
+
+app.post("/api/add-trip-items", async (req, res) => {
+  try {
+    const { user_id, item_ids } = req.body;
+
+    if (!user_id || !item_ids) {
+      return res.status(400).json({ error: "user_id와 item_ids 필요." });
+    }
+
+    const insertRows = [];
+
+    for (const popupId of item_ids) {
+      // 1) popups 테이블에서 주소 가져오기
+      const { data: popup } = await supabase
+        .from("popups")
+        .select("address, name, category")
+        .eq("id", popupId)
+        .single();
+
+      if (!popup) continue;
+
+      // 2) 주소로 위도/경도 가져오기
+      const pos = await geocode(popup.address);
+
+      // 3) user_trip_items에 저장할 구조 생성
+      insertRows.push({
+        user_id,
+        popup_id: popupId,
+        popup_name: popup.name,
+        category: popup.category || "popup",
+        address: popup.address,
+        lat: pos?.lat || null,
+        lng: pos?.lng || null,
+        visit_order: null,
+      });
+    }
+
+    const { error } = await supabase.from("user_trip_items").insert(insertRows);
+
+    if (error) {
+      console.error("DB Insert 실패:", error);
+      return res.status(500).json({ error: "DB insert 실패" });
+    }
+
+    return res.json({
+      ok: true,
+      inserted: insertRows.length,
+    });
+  } catch (err) {
+    console.error("🔥 add-trip-items 오류:", err);
+    res.status(500).json({ error: "서버 오류" });
+  }
+});
 
 app.post("/api/optimize-route", optimizeRoute);
+
+app.post("/api/optimize-route", async (req, res) => {
+  try {
+    const { userId, tripStart, tripEnd } = req.body;
+
+    if (!userId || !tripStart || !tripEnd) {
+      return res.status(400).json({
+        error: "userId, tripStart, tripEnd는 필수입니다.",
+      });
+    }
+
+    // 1) DB에서 사용자 일정 아이템 가져오기
+    const items = await fetchUserTripItems(userId, tripStart, tripEnd);
+
+    if (items.length === 0) {
+      return res.json({
+        ok: true,
+        message: "데이터 없음",
+        schedule: {},
+      });
+    }
+
+    // 2) 거리 기반 정렬 (기존 Kakao 최적화 로직)
+    const optimizedItems = optimizeWithFixedStops(items);
+
+    // 3) 날짜 수 계산 (예: 2박 3일 → 3일)
+    const totalDays =
+      (new Date(tripEnd) - new Date(tripStart)) / (1000 * 60 * 60 * 24) + 1;
+
+    // 4) 최종 일정 엔진 실행 (식당 균등 / 팝업 균등 / 숙소 마지막날 제외)
+    const finalSchedule = buildFinalTrip(
+      optimizedItems,
+      dummyRestaurants,
+      dummyHotels,
+      totalDays
+    );
+
+    return res.json({
+      ok: true,
+      message: "최종 일정 생성 완료",
+      schedule: finalSchedule,
+    });
+  } catch (err) {
+    console.error("❌ 일정 생성 오류:", err);
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 app.use("/api/trip", tripOptimizerRoute);
 const PORT = process.env.PORT || 8000;
@@ -191,6 +316,31 @@ app.use("/api", searchRoute);
 // ==============================
 app.use("/api", apiRouter);
 
+// ==========================
+// 📌 자동 정렬 API 라우트
+// ==========================
+app.post("/api/sort-trip", (req, res) => {
+  try {
+    const { schedule, totalDays } = req.body;
+
+    if (!schedule || !totalDays) {
+      return res.status(400).json({
+        error: "schedule과 totalDays는 필수입니다.",
+      });
+    }
+
+    const sorted = autoSortSchedule(schedule, totalDays);
+
+    return res.json({
+      message: "정렬 완료!",
+      sortedSchedule: sorted,
+    });
+  } catch (err) {
+    console.error("정렬 오류:", err);
+    return res.status(500).json({ error: "정렬 실패" });
+  }
+});
+
 // ==============================
 // 9) 서버 실행
 // ==============================
@@ -206,21 +356,58 @@ app.listen(PORT, () => {
   autoUpdatePopups();
   setInterval(autoUpdatePopups, 10 * 60 * 1000);
 });
+// ==============================
+// 📌 시연용: 2박 3일 일정 자동 분배 엔진
+// ==============================
 
 app.post("/api/optimize-trip", async (req, res) => {
-  const { userId, dates } = req.body;
-
   try {
-    const results = await optimizeMultipleDays(userId, dates);
+    const { userId, tripStart, tripEnd } = req.body;
 
-    res.json({
+    if (!userId || !tripStart || !tripEnd) {
+      return res.status(400).json({
+        ok: false,
+        error: "userId, tripStart, tripEnd는 필수입니다.",
+      });
+    }
+
+    // 1) DB에서 일정 불러오기
+    const rawItems = await fetchUserTripItems(userId, tripStart, tripEnd);
+
+    if (rawItems.length === 0) {
+      return res.json({
+        ok: true,
+        message: "일정 데이터 없음",
+        schedule: {},
+      });
+    }
+
+    // 2) 고정 지점(식당/숙소) 제외한 팝업 기반 거리 최적화
+    const optimizedItems = optimizeWithFixedStops(rawItems);
+
+    // 3) 전체 여행 일수 계산 (2박 3일 → 3일)
+    const totalDays =
+      (new Date(tripEnd) - new Date(tripStart)) / (1000 * 60 * 60 * 24) + 1;
+
+    // 4) ⭐ 최종 일정 엔진 실행
+    const finalSchedule = buildFinalTrip(
+      optimizedItems,
+      dummyRestaurants,
+      dummyHotels,
+      totalDays
+    );
+
+    return res.json({
       ok: true,
-      message: "✅ 선택 날짜 최적화 완료",
-      results,
+      message: "동선 최적화 + 날짜 자동 분배 완료",
+      schedule: finalSchedule,
     });
   } catch (err) {
-    console.error("최적화 실패:", err);
-    res.status(500).json({ error: err.message });
+    console.error("❌ optimize-trip 오류:", err);
+    return res.status(500).json({
+      ok: false,
+      error: err.message,
+    });
   }
 });
 
@@ -234,3 +421,140 @@ process.on("uncaughtException", (err) => {
   process.exit(1);
 });
 console.log("✅ Kakao route mounted at /api/kakao");
+
+// ==========================
+// 📌 일정 자동 정렬 함수들
+// ==========================
+
+// 일정 항목 분류하기
+function splitItems(schedule) {
+  const restaurants = [];
+  const hotels = [];
+  const popups = [];
+
+  Object.values(schedule).forEach((dayItems) => {
+    dayItems.forEach((item) => {
+      if (item.type === "restaurant") restaurants.push(item);
+      else if (item.type === "hotel") hotels.push(item);
+      else if (item.type === "popup") popups.push(item);
+    });
+  });
+
+  return { restaurants, hotels, popups };
+}
+
+// 날짜 수만큼 빈 틀 생성
+function createEmptySchedule(totalDays) {
+  const schedule = {};
+  for (let i = 1; i <= totalDays; i++) {
+    schedule[i] = [];
+  }
+  return schedule;
+}
+
+// 식당(점심/저녁/추가 1개) 배치
+function placeRestaurants(sorted, restaurants, totalDays) {
+  const totalRestaurants = restaurants.length;
+
+  // 하루에 최소 들어갈 식당 수
+  const base = Math.floor(totalRestaurants / totalDays);
+
+  // 나머지(앞 날짜부터 1개씩 추가)
+  let remainder = totalRestaurants % totalDays;
+
+  let index = 0;
+
+  for (let day = 1; day <= totalDays; day++) {
+    let count = base + (remainder > 0 ? 1 : 0);
+
+    remainder = Math.max(0, remainder - 1);
+
+    for (let i = 0; i < count; i++) {
+      if (restaurants[index]) sorted[day].push(restaurants[index]);
+      index++;
+    }
+  }
+}
+
+// 팝업을 식당 사이에 넣기
+
+function placePopups(sorted, popups, totalDays) {
+  const totalPopups = popups.length;
+
+  // 날짜별 최소 팝업 수
+  const base = Math.floor(totalPopups / totalDays);
+  let remainder = totalPopups % totalDays;
+
+  let index = 0;
+
+  for (let day = 1; day <= totalDays; day++) {
+    const count = base + (remainder > 0 ? 1 : 0);
+    remainder = Math.max(0, remainder - 1);
+
+    let dayPopups = popups.slice(index, index + count);
+    index += count;
+
+    // ⚠️ 팝업은 식당 사이에 넣어야 하니까:
+    // 현재 날짜의 식당 리스트 중간중간에 넣는다.
+    insertPopupsIntoRestaurants(sorted[day], dayPopups);
+  }
+}
+
+// 팝업을 식당 사이에 자연스럽게 끼워넣는 보조 함수
+function insertPopupsIntoRestaurants(dayList, popupList) {
+  // dayList : 이미 식당이 들어있는 하루 일정
+  // popupList : 그날 넣어야 하는 팝업 목록들
+
+  let result = [];
+
+  let restaurantIndex = 0;
+  let popupIndex = 0;
+
+  // 식당이 있다면 식당-팝업-식당-팝업 순
+  while (restaurantIndex < dayList.length || popupIndex < popupList.length) {
+    // 1) 식당 먼저 넣는다
+    if (restaurantIndex < dayList.length) {
+      result.push(dayList[restaurantIndex]);
+      restaurantIndex++;
+    }
+
+    // 2) 그 다음 팝업을 넣는다
+    if (popupIndex < popupList.length) {
+      result.push(popupList[popupIndex]);
+      popupIndex++;
+    }
+  }
+
+  // 결과 덮어쓰기
+  dayList.length = 0;
+  result.forEach((item) => dayList.push(item));
+}
+
+// 숙소는 하루 마지막
+function placeHotels(sorted, hotels, totalDays) {
+  // 총 숙소 개수
+  const totalHotels = hotels.length;
+
+  // 마지막 날에는 숙소 넣지 않음 → 넣을 수 있는 날짜는 totalDays - 1
+  const usableDays = totalDays - 1;
+
+  // usableDays보다 숙소가 많으면 잘못된 입력이니 그냥 가능한 만큼만 배치
+  const maxHotels = Math.min(usableDays, totalHotels);
+
+  for (let day = 1; day <= maxHotels; day++) {
+    sorted[day].push(hotels.shift());
+  }
+}
+
+// 전체 정렬 함수
+function autoSortSchedule(schedule, totalDays) {
+  const { restaurants, hotels, popups } = splitItems(schedule);
+
+  const sorted = createEmptySchedule(totalDays);
+
+  placeRestaurants(sorted, restaurants, totalDays);
+  placePopups(sorted, popups, totalDays);
+  placeHotels(sorted, hotels, totalDays);
+
+  return sorted;
+}

@@ -1,9 +1,9 @@
 import supabase from "../chains/supabaseClient.js";
 
-// ================================
-// 🔹 1. 사용자 일정 데이터 불러오기
-// ================================
-export async function fetchUserTripItems(userId, tripStart, tripEnd) {
+/* ============================================================
+   0. 사용자 일정 불러오기
+============================================================ */
+async function fetchUserTripItems(userId, tripStart, tripEnd) {
   const { data, error } = await supabase
     .from("user_trip_items")
     .select("*")
@@ -15,33 +15,31 @@ export async function fetchUserTripItems(userId, tripStart, tripEnd) {
     console.error("❌ Error fetching user_trip_items:", error);
     return [];
   }
-
   return data || [];
 }
 
-// ================================
-// 🔹 2. 거리 계산 함수
-// ================================
+/* ============================================================
+   1. 거리 기반 동선 최적화 (기존 기능 유지)
+============================================================ */
+
+// 1-1. 거리 계산
 function distance(a, b) {
-  const dx = a.lat - b.lat;
-  const dy = a.lng - b.lng;
+  const dx = (a.lat || 0) - (b.lat || 0);
+  const dy = (a.lng || 0) - (b.lng || 0);
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-// ================================
-// 🔹 3. 특정 구간(popup들만) 최적화
-// ================================
+// 1-2. 팝업 부분 최적화
 function optimizeSegment(popups, start, end) {
   const points = [...popups];
   const result = [];
-
   let current;
 
-  // 시작이 있으면 기준점을 start로 사용
   if (start) {
     current = start;
   } else {
-    current = points.shift(); // start 없으면 첫 팝업이 기준
+    current = points.shift();
+    if (!current) return [];
     result.push(current);
   }
 
@@ -51,7 +49,6 @@ function optimizeSegment(popups, start, end) {
 
     for (let i = 0; i < points.length; i++) {
       const dist = distance(current, points[i]);
-
       if (dist < minDist) {
         minDist = dist;
         nearestIndex = i;
@@ -65,35 +62,28 @@ function optimizeSegment(popups, start, end) {
   return result;
 }
 
-// ================================
-// 🔹 4. 고정지점 포함 전체 최적화
-// ================================
+// 1-3. 고정 지점 포함 전체 최적화
 function optimizeWithFixedStops(items) {
-  // 일단 현재 순서대로 정렬
   items.sort((a, b) => (a.visit_order ?? 999) - (b.visit_order ?? 999));
 
   const result = [];
-  let buffer = []; // popup 저장용 임시 공간
-  let prevFixed = null; // 이전 고정 지점
+  let buffer = [];
+  let prevFixed = null;
 
   for (const item of items) {
-    // ✅ 고정 장소 (식당 / 숙소)
     if (item.category === "food" || item.category === "lodging") {
       if (buffer.length > 0) {
         const optimized = optimizeSegment(buffer, prevFixed, item);
         result.push(...optimized);
         buffer = [];
       }
-
       result.push(item);
       prevFixed = item;
     } else {
-      // ✅ popup, 전시, 축제 등 최적화 대상
       buffer.push(item);
     }
   }
 
-  // 마지막에 남은 popup 처리
   if (buffer.length > 0) {
     const optimized = optimizeSegment(buffer, prevFixed, null);
     result.push(...optimized);
@@ -102,55 +92,105 @@ function optimizeWithFixedStops(items) {
   return result;
 }
 
-// ================================
-// 🔹 5. 날짜 단위 동선 최적화
-// ================================
-export async function optimizeTripByDate(userId, date) {
-  const { data: items, error } = await supabase
-    .from("user_trip_items")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("visit_date", date);
+/* ============================================================
+   2. 새 일정 엔진 — 식당/팝업 균등분배 + 마지막날 숙소 제외
+============================================================ */
 
-  if (error) {
-    console.error("❌ Error fetching data for optimization:", error);
-    throw error;
+// 2-1. 균등 분배
+function distributeEvenly(items, totalDays) {
+  const total = items.length;
+  const base = Math.floor(total / totalDays);
+  let remainder = total % totalDays;
+
+  const result = {};
+  let index = 0;
+
+  for (let day = 1; day <= totalDays; day++) {
+    const count = base + (remainder > 0 ? 1 : 0);
+    if (remainder > 0) remainder -= 1;
+
+    result[day] = items.slice(index, index + count);
+    index += count;
   }
 
-  if (!items || items.length === 0) {
-    return [];
-  }
-
-  console.log(`📅 ${date} 최적화 대상 개수:`, items.length);
-
-  const optimizedSchedule = optimizeWithFixedStops(items);
-
-  // ✅ 최종 order 업데이트
-  for (let i = 0; i < optimizedSchedule.length; i++) {
-    const item = optimizedSchedule[i];
-
-    await supabase
-      .from("user_trip_items")
-      .update({ visit_order: i + 1 })
-      .eq("id", item.id);
-  }
-
-  return optimizedSchedule;
+  return result;
 }
 
-// ================================
-// 🔹 6. 여러 날짜 한꺼번에 최적화
-// ================================
-export async function optimizeMultipleDays(userId, dates) {
-  const results = [];
+// 2-2. 식당 + 팝업 섞기
+function mergeRestaurantsAndPopups(restaurants, popups) {
+  const result = [];
+  let r = 0;
+  let p = 0;
 
-  for (const date of dates) {
-    const optimized = await optimizeTripByDate(userId, date);
-    results.push({
-      date,
-      optimizedCount: optimized.length,
-    });
+  while (r < restaurants.length || p < popups.length) {
+    if (r < restaurants.length) result.push(restaurants[r++]);
+    if (p < popups.length) result.push(popups[p++]);
   }
 
-  return results;
+  return result;
 }
+
+// 2-3. 숙소 배치 (마지막 날 제외)
+function placeHotels(finalSchedule, hotels, totalDays) {
+  const usableDays = totalDays - 1;
+
+  for (let day = 1; day <= usableDays; day++) {
+    if (hotels.length > 0) {
+      finalSchedule[day].push(hotels.shift());
+    }
+  }
+}
+
+// 2-4. 최종 일정 엔진 (distance 결과를 이용)
+function buildFinalTrip(
+  optimizedItems,
+  dummyRestaurants,
+  dummyHotels,
+  totalDays
+) {
+  // 1) 카테고리 분류
+  const restaurants = dummyRestaurants;
+  const hotels = dummyHotels;
+  const popups = optimizedItems.filter(
+    (i) => i.category !== "식당" && i.category !== "숙박"
+  );
+
+  // 2) 팝업 균등 분배
+  const popupByDay = distributeEvenly(popups, totalDays);
+
+  // 3) 식당 균등 분배
+  const restaurantByDay = distributeEvenly(restaurants, totalDays);
+
+  // 4) 최종 스케줄 초기화
+  const final = {};
+  for (let d = 1; d <= totalDays; d++) final[d] = [];
+
+  // 5) “식당 → 팝업 → 식당 → 팝업” 방식으로 병합
+  for (let day = 1; day <= totalDays; day++) {
+    const merged = [];
+    const r = restaurantByDay[day] || [];
+    const p = popupByDay[day] || [];
+
+    let ri = 0;
+    let pi = 0;
+
+    while (ri < r.length || pi < p.length) {
+      if (ri < r.length) merged.push(r[ri++]);
+      if (pi < p.length) merged.push(p[pi++]);
+    }
+
+    final[day] = merged;
+  }
+
+  // 6) 숙박 배치 (마지막 날 제외)
+  for (let day = 1; day < totalDays; day++) {
+    if (hotels[day - 1]) final[day].push(hotels[day - 1]);
+  }
+
+  return final;
+}
+
+/* ============================================================
+   ⭐ 최종 Export
+============================================================ */
+export { fetchUserTripItems, optimizeWithFixedStops, buildFinalTrip };

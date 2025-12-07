@@ -1,7 +1,9 @@
-// ai/utils/routeOptimizer.js
+// =====================
+// 시간 관련 유틸
+// =====================
 
 // 문자열 "HH:MM" -> 분 단위 number (예: "10:30" => 630)
-function timeToMinutes(str, defaultMinutes) {
+function timeToMinutes(str, defaultMinutes = 600) {
   if (!str) return defaultMinutes;
   const [h, m] = str.split(":").map(Number);
   if (Number.isNaN(h) || Number.isNaN(m)) return defaultMinutes;
@@ -12,12 +14,14 @@ function timeToMinutes(str, defaultMinutes) {
 function minutesToTime(m) {
   const h = Math.floor(m / 60);
   const mm = m % 60;
-  const hhStr = h.toString().padStart(2, "0");
-  const mmStr = mm.toString().padStart(2, "0");
-  return `${hhStr}:${mmStr}`;
+  return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
-// 대충 거리 계산 (하버사인) → km
+// =====================
+// 거리 계산
+// =====================
+
+// 하버사인 거리 계산 (km)
 function haversineKm(a, b) {
   const R = 6371; // 지구 반지름 km
   const toRad = (x) => (x * Math.PI) / 180;
@@ -33,125 +37,135 @@ function haversineKm(a, b) {
   const aa =
     sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLng * sinLng;
   const c = 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa));
+
   return R * c;
 }
 
-// 거리(km) + 속도(km/h)로 이동 시간(분) 추정
+// 거리 기반 이동 시간(분)
 function estimateTravelMinutes(a, b, speedKmh = 3) {
   const distKm = haversineKm(a, b);
   const hours = distKm / speedKmh;
   return Math.round(hours * 60);
 }
 
-/**
- * 하루치 팝업 동선 최적화
- * items: 같은 날짜(visit_date)인 user_trip_items 배열
- * 옵션:
- *   dayStart       : 하루 시작 시간 (분 단위, 기본 10:00 = 600분)
- *   defaultOpen    : open_time 없을 때 기본 오픈시간 (분)
- *   defaultClose   : close_time 없을 때 기본 마감시간 (분)
- *   stayMinutes    : 한 팝업에서 머무는 시간 (분)
- */
+// =====================
+// 거리 기반 정렬 (카테고리 내부용)
+// =====================
+function sortByDistance(list) {
+  if (!list || list.length <= 1) return list;
+
+  const sorted = [list[0]];
+  const remain = list.slice(1);
+
+  while (remain.length > 0) {
+    const last = sorted[sorted.length - 1];
+
+    let bestIdx = 0;
+    let bestDist = Infinity;
+
+    for (let i = 0; i < remain.length; i++) {
+      const dist = haversineKm(last, remain[i]);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    }
+
+    sorted.push(remain.splice(bestIdx, 1)[0]);
+  }
+
+  return sorted;
+}
+
+// =====================
+// 하루 일정 최적화
+// =====================
 export function optimizeDayRoute(items, options = {}) {
   const {
-    dayStart = 10 * 60, // 10:00
-    defaultOpen = 10 * 60, // 10:00
-    defaultClose = 22 * 60, // 22:00
-    stayMinutes = 60, // 1시간
+    dayStart = 10 * 60, // 10:00 시작
+    stayMinutes = 60,
     speedKmh = 3,
   } = options;
 
   if (!items || items.length === 0) return [];
 
-  const remaining = items.map((it) => ({ ...it }));
+  // 1) 카테고리 구분
+  const hotels = items.filter((it) => it.category === "숙박");
+  const foods = items.filter((it) => it.category === "식당");
+  const others = items.filter(
+    (it) => it.category !== "식당" && it.category !== "숙박"
+  );
+
+  // 숙박은 하루 마지막 1개만 사용
+  const hotel = hotels.length > 0 ? hotels[0] : null;
+
+  // 카테고리별 정렬
+  const sortedFoods = sortByDistance(foods);
+  const sortedOthers = sortByDistance(others);
+
+  // 2) 식당 → others → 식당 → others 로 번갈아 구성
   const route = [];
-  let current = null;
-  let currentTime = dayStart;
+  let fi = 0;
+  let oi = 0;
 
-  while (remaining.length > 0) {
-    let bestIdx = -1;
-    let bestScore = Infinity;
-    let bestArrival = null;
-
-    for (let i = 0; i < remaining.length; i++) {
-      const c = remaining[i];
-
-      // lat/lng 없으면 패스
-      if (c.lat == null || c.lng == null) continue;
-
-      const travelMinutes = current
-        ? estimateTravelMinutes(
-            { lat: current.lat, lng: current.lng },
-            { lat: c.lat, lng: c.lng },
-            speedKmh
-          )
-        : 0;
-
-      let arrival = currentTime + travelMinutes;
-
-      const open = timeToMinutes(c.open_time, defaultOpen);
-      const close = timeToMinutes(c.close_time, defaultClose);
-
-      if (arrival < open) {
-        arrival = open; // 너무 일찍 도착하면 문 열릴 때까지 기다림
-      }
-
-      if (arrival > close) {
-        // 이미 마감 시간 지나서 못 감
-        continue;
-      }
-
-      // 점수: 도착 시간 + 이동 시간 약간 가중치
-      const score = arrival + travelMinutes * 0.3;
-
-      if (score < bestScore) {
-        bestScore = score;
-        bestIdx = i;
-        bestArrival = arrival;
-      }
+  while (fi < sortedFoods.length || oi < sortedOthers.length) {
+    if (fi < sortedFoods.length) {
+      route.push(sortedFoods[fi]);
+      fi++;
     }
-
-    if (bestIdx === -1) {
-      // 더 이상 갈 수 있는 팝업이 없음
-      break;
+    if (oi < sortedOthers.length) {
+      route.push(sortedOthers[oi]);
+      oi++;
     }
-
-    const next = remaining.splice(bestIdx, 1)[0];
-
-    const startMinutes = bestArrival;
-    const endMinutes = startMinutes + stayMinutes;
-
-    route.push({
-      ...next,
-      _computed_start_minutes: startMinutes,
-      _computed_end_minutes: endMinutes,
-      expected_start_time: minutesToTime(startMinutes),
-      expected_end_time: minutesToTime(endMinutes),
-    });
-
-    current = next;
-    currentTime = endMinutes;
   }
 
-  return route;
+  // 3) 마지막에 숙소 추가
+  if (hotel) route.push(hotel);
+
+  // 4) 시간 계산 (필터링 없음)
+  let currentTime = dayStart;
+  let current = null;
+
+  const result = [];
+
+  for (const r of route) {
+    const travelMinutes = current
+      ? estimateTravelMinutes(
+          { lat: current.lat, lng: current.lng },
+          { lat: r.lat, lng: r.lng },
+          speedKmh
+        )
+      : 0;
+
+    const start = currentTime + travelMinutes;
+    const end = start + stayMinutes;
+
+    result.push({
+      ...r,
+      _computed_start_minutes: start,
+      _computed_end_minutes: end,
+      expected_start_time: minutesToTime(start),
+      expected_end_time: minutesToTime(end),
+    });
+
+    current = r;
+    currentTime = end;
+  }
+
+  return result;
 }
 
-/**
- * 여러 날짜에 대해 동선 최적화
- * items: user_trip_items 전체 (여러 날짜 섞여있어도 됨)
- * return: [{ date: '2025-12-01', items: [...최적 순서...] }, ...]
- */
+// =====================
+// 여러 날짜 일정 최적화
+// =====================
 export function optimizeRouteByDate(items, options = {}) {
-  // 1) 날짜별로 그룹핑
   const byDate = new Map();
+
+  // 날짜별 그룹화
   for (const item of items) {
     let date = item.visit_date || item.period_start || item.period_end;
 
-    // ✅ 날짜 없으면 오늘 날짜 자동 부여
-    if (!date) {
-      const today = new Date().toISOString().slice(0, 10);
-      date = today;
-    }
+    if (!date) date = new Date().toISOString().slice(0, 10);
 
     const key =
       typeof date === "string" ? date : date.toISOString().slice(0, 10);
@@ -160,13 +174,12 @@ export function optimizeRouteByDate(items, options = {}) {
     byDate.get(key).push(item);
   }
 
-  // 2) 각 날짜별로 최적화 실행
   const result = [];
 
+  // 날짜별 최적화 실행
   for (const [date, list] of byDate.entries()) {
     const optimized = optimizeDayRoute(list, options);
 
-    // 순서 번호 붙여주기
     const withOrder = optimized.map((it, idx) => ({
       ...it,
       visit_order: idx + 1,
@@ -179,7 +192,8 @@ export function optimizeRouteByDate(items, options = {}) {
     });
   }
 
-  // 날짜 오름차순 정렬
+  // 날짜 정렬
   result.sort((a, b) => (a.date < b.date ? -1 : 1));
+
   return result;
 }
