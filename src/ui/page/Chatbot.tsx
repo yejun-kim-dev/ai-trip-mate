@@ -9,6 +9,7 @@ interface RecommendationItem {
   period: string;
   location: string;
   type: string; // 예: "전시 체험", "공연"
+  category?: string; // 백엔드 원본 카테고리
 }
 
 interface Message {
@@ -334,9 +335,9 @@ const ChatbotPage: React.FC = () => {
                       {/* ... 카드 내부 내용 생략 (기존과 동일) ... */}
                       {/* (카드 코드 전체는 위와 동일하게 유지하세요) */}
                       <div className="flex flex-col justify-center items-center pr-2 border-r border-gray-300 w-[50px] min-w-[50px]">
-                        <p className="text-[11px] font-semibold text-gray-700 text-center leading-tight whitespace-pre-wrap">
-                          {item.type}
-                        </p>
+                          <p className="text-[11px] font-semibold text-gray-700 text-center leading-tight whitespace-pre-wrap">
+                            {item.category || item.type || "기타"}
+                          </p>
                       </div>
                       <div className="flex-1 flex justify-between pl-4 text-left items-center overflow-hidden mt-1">
                         <div className="flex-1 min-w-0">

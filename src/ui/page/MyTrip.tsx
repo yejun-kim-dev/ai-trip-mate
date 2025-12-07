@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { MapPinOff, Plus } from "lucide-react";
 import { TripState } from "../component/data/dummyTrips";
 import chatbotIcon from "../component/images/chatbot_icon.png";
+import defaultTripImg from "../component/images/tripbasicimage.png";
 import { Camera } from "lucide-react";
 
 
@@ -11,8 +12,6 @@ export default function MyTrip() {
   const navigate = useNavigate();
   const location = useLocation();
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-
   const rawTripData: TripState | undefined = location.state?.tripData;
 
   // ✅ 뒤로가기(Back) 눌렀을 때 바로 홈으로 이동
@@ -94,7 +93,30 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         },
       }
     : undefined;
-  const [tripImage, setTripImage] = useState<string | null>(tripData?.imageUrl || null);
+    const DEFAULT_TRIP_IMAGE = 
+    typeof defaultTripImg === 'string' 
+      ? defaultTripImg 
+      : (defaultTripImg as any).src || ""; // 객체라면 .src를 추출
+
+  const [tripImage, setTripImage] = useState<string | null>(null);
+
+  // 🔍 [진단 2] 초기화 로직 (콘솔 로그 추가)
+  useEffect(() => {
+    // 현재 tripData에 저장된 이미지 주소가 무엇인지 확인
+    console.log("① 저장된 tripData 이미지:", tripData?.imageUrl);
+    console.log("② 사용할 기본 이미지:", DEFAULT_TRIP_IMAGE);
+
+    if (tripImage === null) {
+      if (tripData?.imageUrl && tripData.imageUrl !== "") {
+        console.log("👉 결정: 저장된 이미지 사용");
+        setTripImage(tripData.imageUrl);
+      } else {
+        console.log("👉 결정: 기본 이미지 사용");
+        setTripImage(DEFAULT_TRIP_IMAGE);
+      }
+    }
+  }, [tripData]);
+
 
   if (!tripData) {
     return (
@@ -167,9 +189,18 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       {/* 🎨 상단 이미지 섹션 */}
       <div className="fixed top-0 left-0 w-full max-w-md h-[190px] z-50">
         <img
-        src={tripImage || tripData.imageUrl || "https://placehold.co/600x400/007AFF/FFFFFF?text=My+Trip"}
+        src={tripImage || DEFAULT_TRIP_IMAGE}
         alt={`${tripData.city} 여행`}
         className="absolute top-0 inset-0 w-full h-full object-cover transition-all duration-300"
+        // ✨ [해결책] 이미지가 깨지면(엑스박스) 즉시 기본 이미지로 갈아끼우는 코드
+        onError={(e) => {
+          console.error("❌ 이미지 로드 실패! 기본 이미지로 대체합니다.");
+          console.error("실패한 주소:", e.currentTarget.src);
+          e.currentTarget.src = DEFAULT_TRIP_IMAGE;
+          
+          // 만약 기본 이미지조차 실패하면 아예 빈칸 방지용 색상으로 변경
+          e.currentTarget.onerror = null; 
+        }}
       />
         <div className="absolute top-0 inset-0 bg-gradient-to-t from-black/60 via-black/50 to-transparent" />
         <div className="absolute bottom-5 left-0 right-0 text-center text-white px-6">
@@ -227,7 +258,7 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       {/* 🎨 일차별 일정 */}
       <div className="flex flex-col gap-2 px-5 mt-[210px]">
         {days.length > 0 ? (
-          days.map((d) => {
+          days.map((d, index) => {
             const placesForDay = tripData.schedule?.[d.day] || [];
 
             return (
@@ -242,7 +273,15 @@ const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                   <span className="text-[#706F6F] font-medium text-[14px]">
                     {d.date}
                   </span>
-                </div>
+                  {index === 0 && (
+              <button
+                onClick={() => alert(`AI가 ${d.day}일차 코스를 추천해드립니다!`)}
+                className="ml-auto px-3 py-1 rounded-full bg-gradient-to-r from-[#4facfe] to-[#00f2fe] text-white text-[11px] font-bold shadow-sm hover:opacity-90 transition-opacity"
+              >
+                AI 일정 생성
+              </button>
+            )}
+          </div>
 
                 <div className="relative flex flex-col gap-2">
                   {placesForDay.length > 0 && (
