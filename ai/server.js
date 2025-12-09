@@ -16,14 +16,14 @@ import apiRouter from "./api/index.js";
 import { optimizeRoute } from "./api/optimizeRoute.js";
 import kakaoRoute from "./api/kakaoRoute.js";
 import tripOptimizerRoute from "./tripOptimizerRoute.js";
-
-import { addTripItem } from "./api/addTripItem.js";
-
+import tripOptimizeRoute from "./api/tripOptimizeRoute.js";
+import { fetchMyTrips } from "./services/tripService.js";
 // 크롤러 및 데이터 수집 util
 import * as xml2js from "xml2js";
 import { extractPlaceName } from "../utils/locationExtractor.js";
 import { fetchNaverBlogPopups } from "../utils/fetchNaverBlogPopups.js";
-
+import { addTripItem } from "./api/addTripItem.js";
+import getUserTrip from "./api/getTripItems.js";
 
 // -------------------------
 // 1) 행사명 패턴 정의
@@ -138,6 +138,34 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+// ===============================
+// 🚀 여행 목록 불러오기 API
+// ===============================
+app.post("/api/get-my-trips", async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    const { data, error } = await supabase
+      .from("trips")
+      .select("*")
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("❌ get-my-trips error:", error);
+      return res.json({ ok: false, trips: [] });
+    }
+
+    return res.json({ ok: true, trips: data || [] });
+  } catch (err) {
+    console.error("❌ get-my-trips fatal:", err);
+    return res.json({ ok: false, trips: [] });
+  }
+});
+// =======================================
+// 🚀 일정 불러오기 & 일정 추가 — 반드시 맨 앞에!
+// =======================================
+app.use("/api/get-trip-items", getUserTrip);  // Router
+app.post("/api/add-trip-item", addTripItem);  // Handler
 
 // =======================================
 // 1) 일정 아이템 추가
@@ -214,6 +242,7 @@ app.use("/api/kakao", kakaoRoute);
   
     res.json({ country: countryCode.toUpperCase(), cities });
   });
+
   // ==============================
   // 6) 여행 날짜 캘린더 API
   // ==============================
@@ -397,7 +426,7 @@ app.post("/api/sort-trip", (req, res) => {
     res.status(500).json({ error: "정렬 실패" });
   }
 });
-
+app.use("/api", tripOptimizeRoute);
 
 // =======================================
 // 11) 서버 시작

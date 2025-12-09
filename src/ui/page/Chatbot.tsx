@@ -2,15 +2,17 @@ import React, { useEffect, useRef, useState } from "react";
 import { ChevronLeft } from "lucide-react";
 import sendIcon from "../component/images/send.png"; // 경로 확인 필요
 import { useLocation, useNavigate } from "react-router-dom";
-
+import { USER_ID } from "../../data/user";
 // ✅ 타입 정의
 interface RecommendationItem {
+  id: number;            // popup_id
   title: string;
   period: string;
   location: string;
-  type: string; // 예: "전시 체험", "공연"
-  category?: string; // 백엔드 원본 카테고리
+  type: string;
+  category?: string;
 }
+
 
 interface Message {
   id: number;
@@ -46,7 +48,31 @@ const ChatbotPage: React.FC = () => {
   const navigate = useNavigate();
   const bottomRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
-  const tripData = location.state?.tripData;
+
+  const [tripData, setTripData] = useState<any>(() => {
+    // 1) 네비게이션으로 전달된 데이터 확인
+    if (location.state?.tripData) {
+      return location.state.tripData;
+    }
+    
+    // 2) 데이터가 없다면 ID로 로컬스토리지 검색 (새로고침 대비)
+    const passedId = location.state?.id;
+    if (passedId) {
+      const allTrips = JSON.parse(localStorage.getItem("trips") || "[]");
+      const found = allTrips.find((t: any) => String(t.id) === String(passedId));
+      if (found) return found;
+    }
+    
+    return null;
+  });
+
+  // 데이터가 정말 없을 때 예외 처리
+  useEffect(() => {
+    if (!tripData) {
+      alert("잘못된 접근이거나 여행 정보가 없습니다.");
+      navigate("/", { replace: true });
+    }
+  }, [tripData, navigate]);
 
   // 이전 대화 맥락 저장 (지역, 날짜) - 카테고리만 바뀌어도 유지
   const [lastContext, setLastContext] = useState<{
@@ -92,45 +118,86 @@ const ChatbotPage: React.FC = () => {
   }, [messages]);
 
   // ✅ 일정 추가 로직
-  const handleAddRecommendation = (item: RecommendationItem) => {
-    if (!tripData) {
+  // 🔥 챗봇 추천 → 일정 저장 → DB 반영
+const handleAddRecommendation = async (item: RecommendationItem) => {
+    if (!tripData || !tripData.dateRange) {
       alert("여행 정보가 없습니다.");
       return;
     }
 
-    let trips = JSON.parse(localStorage.getItem("trips") || "[]");
-    let targetIndex = trips.findIndex(
-      (t: any) =>
-        Number(t.id) === Number(tripData.id) ||
-        Number(t.tripNo) === Number(tripData.tripNo)
-    );
+    const userId = USER_ID;
+    const tripId = tripData.id;
 
-    if (targetIndex === -1) {
-      alert("오류: 여행 정보를 찾을 수 없습니다.");
-      return;
+    // 🔥 [핵심 수정 1] 날짜 변환 로직 변경 (toISOString 사용 X)
+    // 여행 시작일 객체 생성
+    const startDateRaw = new Date(tripData.dateRange.start);
+    
+    // 타임존 문제 해결: 로컬 시간 기준으로 연/월/일 추출하여 YYYY-MM-DD 문자열 직접 생성
+    const year = startDateRaw.getFullYear();
+    const month = String(startDateRaw.getMonth() + 1).padStart(2, "0");
+    const day = String(startDateRaw.getDate()).padStart(2, "0");
+    const visitDate = `${year}-${month}-${day}`; // 예: "2025-12-25" (한국 날짜 유지)
+
+    try {
+      // 1️⃣ 서버 API 호출
+      const res = await fetch("/api/add-trip-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          tripId,
+          selectedPopupIds: [item.id],
+          visitDate, // 🔥 수정된 날짜 문자열 전송
+        }),
+      });
+
+      const json = await res.json();
+      if (!json.ok) throw new Error("서버 저장 실패");
+
+      // 2️⃣ 로컬스토리지 업데이트
+      const storedTrips = JSON.parse(localStorage.getItem("trips") || "[]");
+      // ID 비교 시 안전하게 String으로 변환
+      const tripIndex = storedTrips.findIndex((t: any) => String(t.id) === String(tripId));
+
+      let updatedTripData = tripData;
+
+      if (tripIndex !== -1) {
+        const dayIndex = 1; // 1일차에 추가
+
+        if (!storedTrips[tripIndex].schedule) storedTrips[tripIndex].schedule = {};
+        if (!storedTrips[tripIndex].schedule[dayIndex]) storedTrips[tripIndex].schedule[dayIndex] = [];
+
+        const newItem = {
+          id: item.id,
+          popup_id: item.id,
+          name: item.title,
+          popup_name: item.title,
+          location: item.location,
+          address: item.location,
+          period: item.period,
+          open_time: item.period,
+          type: item.type,
+          visit_date: visitDate // 🔥 여기도 수정된 날짜 저장
+        };
+
+        storedTrips[tripIndex].schedule[dayIndex].push(newItem);
+        localStorage.setItem("trips", JSON.stringify(storedTrips));
+        updatedTripData = storedTrips[tripIndex];
+      }
+
+      alert(`"${item.title}" 일정이 추가되었습니다!`);
+      navigate("/mytrip", {
+        replace: true,
+        state: { 
+          id: tripId,
+          tripData: updatedTripData 
+        },
+      });
+
+    } catch (err) {
+      console.error(err);
+      alert("일정 저장 중 오류가 발생했습니다.");
     }
-
-    const dayKey = "1";
-    const updatedTrip = {
-      ...trips[targetIndex],
-      schedule: {
-        ...trips[targetIndex].schedule,
-        [dayKey]: [
-          ...(trips[targetIndex].schedule?.[dayKey] || []),
-          {
-            id: Date.now(),
-            name: item.title,
-            period: item.period,
-            location: item.location,
-          },
-        ],
-      },
-    };
-
-    trips[targetIndex] = updatedTrip;
-    localStorage.setItem("trips", JSON.stringify(trips));
-
-    navigate("/mytrip", { state: { tripData: updatedTrip }, replace: true });
   };
 
   // ✅ 메시지 전송 핸들러

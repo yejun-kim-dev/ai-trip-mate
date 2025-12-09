@@ -1,136 +1,211 @@
 "use client";
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  ChangeEvent,
+} from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { MapPinOff, Plus, Camera, Pencil, Check, GripVertical } from "lucide-react";
-import { TripState } from "../component/data/dummyTrips";
+
 import chatbotIcon from "../component/images/chatbot_icon.png";
 import defaultTripImg from "../component/images/tripbasicimage.png";
 
-export default function MyTrip() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const rawTripData: TripState | undefined = location.state?.tripData;
-
-  // 뒤로가기 핸들링
-  useEffect(() => {
-    const handlePopState = () => navigate("/", { replace: true });
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [navigate]);
-
-  // 히스토리 정리
-  useEffect(() => {
-    if (location.state?.tripData) {
-      window.history.replaceState({}, "", "/mytrip");
-    }
-  }, [location.state]);
-
-  // 최신 데이터 동기화
-  useEffect(() => {
-    if (!rawTripData) return;
-    const trips = JSON.parse(localStorage.getItem("trips") || "[]");
-    const latestTrip = trips.find(
-      (t: any) => String(t.id) === String(rawTripData.id)
-    );
-    if (!latestTrip) return;
-
-    latestTrip.dateRange = {
-      ...latestTrip.dateRange,
-      start: latestTrip.dateRange.start ? new Date(latestTrip.dateRange.start) : null,
-      end: latestTrip.dateRange.end ? new Date(latestTrip.dateRange.end) : null,
+/* ----------------------------
+   1) 데이터 정규화 함수 (최상단)
+------------------------------ */
+const normalizeTripData = (t: any) => {
+  if (!t) {
+    return {
+      id: null,
+      userId: null,
+      country: "",
+      city: "",
+      dateRange: { start: null, end: null, text: "" },
+      companions: {},
+      imageUrl: defaultTripImg,
+      schedule: {},
     };
-    location.state = { tripData: latestTrip };
-  }, [location.key]);
+  }
 
-  // 데이터 정제
-  // rawTrip: MyTrip → navigate에서 넘어온 값
-const rawTrip = location.state?.tripData;
-
-// 안전하게 tripData 정규화 (전체 구조 보존)
-const tripData = rawTrip
-  ? {
-      ...rawTrip, // ⚠ 전체 필드를 보존하기 위해 반드시 필요
-
-      id: rawTrip.id ?? rawTrip.tripNo ?? null,
-      city: rawTrip.city ?? null,
-      country: rawTrip.country ?? null,
-
-      dateRange: rawTrip.dateRange
-        ? {
-            start: rawTrip.dateRange.start
-              ? new Date(rawTrip.dateRange.start)
-              : null,
-            end: rawTrip.dateRange.end
-              ? new Date(rawTrip.dateRange.end)
-              : null,
-            text: rawTrip.dateRange.text ?? "", // text까지 보존
-          }
-        : null,
-
-      schedule: rawTrip.schedule ?? {}, // 🔥 schedule 유실 방지
-      imageUrl: rawTrip.imageUrl ?? null,
-      companions: rawTrip.companions ?? null,
-    }
-  : null;
-
-
-  const DEFAULT_TRIP_IMAGE =
-    typeof defaultTripImg === "string"
-      ? defaultTripImg
-      : (defaultTripImg as any).src || "";
-
-  const [tripImage, setTripImage] = useState<string | null>(null);
-
-  // 이미지 업로드
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      setTripImage(base64);
-      const trips = JSON.parse(localStorage.getItem("trips") || "[]");
-      const idx = trips.findIndex(
-        (t: any) =>
-          String(t.id) === String(tripData?.id) ||
-          String(t.tripNo) === String(tripData?.tripNo)
-      );
-      if (idx !== -1) {
-        trips[idx].imageUrl = base64;
-        localStorage.setItem("trips", JSON.stringify(trips));
-      }
-    };
-    reader.readAsDataURL(file);
+  return {
+    id: t.id,
+    userId: t.userId ?? t.user_id,
+    country: t.country || "",
+    city: t.city || "",
+    dateRange: {
+      start: t.dateRange?.start ? new Date(t.dateRange.start) : null,
+      end: t.dateRange?.end ? new Date(t.dateRange.end) : null,
+      text: t.dateRange?.text || "",
+    },
+    companions: t.companions || {},
+    imageUrl: t.imageUrl || defaultTripImg,
+    schedule: t.schedule || {},
   };
+};
 
-  useEffect(() => {
-    if (tripImage === null) {
-      setTripImage(
-        tripData?.imageUrl && tripData.imageUrl !== ""
-          ? tripData.imageUrl
-          : DEFAULT_TRIP_IMAGE
-      );
+
+/* -------------------------
+   2) 메인 컴포넌트
+--------------------------- */
+export default function MyTrip() {
+    // ===================================================
+    // 🔥 [수정 1] 모든 Hooks는 컴포넌트 최상단에 위치해야 합니다.
+    // ===================================================
+    const navigate = useNavigate();
+    const location = useLocation();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const tripId = location.state?.id || null;
+    const initialTripState = location.state?.tripData || null;
+
+    const [tripData, setTripData] = useState<any | null>(null);
+    const [schedule, setSchedule] = useState<any>({});
+    const [tripImage, setTripImage] = useState<string | null>(null);
+    const [isEditMode, setIsEditMode] = useState(false);
+
+    const dragItem = useRef<{ day: number; index: number } | null>(null);
+    // 드래그 로직을 위해 dragOverItem도 Hooks 영역으로 올립니다.
+    const dragOverItem = useRef<{ day: number; index: number } | null>(null); 
+
+
+    /* -------------------------
+     6) DB 일정 → 로컬 일정 변환 함수 (useCallback)
+       - tripData가 null일 수 있으므로 의존성 안전 처리
+    --------------------------- */
+    const convertDBItemsToSchedule = useCallback(
+      (items: any[]) => {
+        const newSchedule: any = {};
+        
+        // 🚨 tripData가 null일 경우, base Date를 설정할 수 없습니다. 
+        // 하지만 이 함수는 tripData가 로드된 후에만 호출되어야 합니다.
+        // 현재 로직을 유지하며 tripData가 null일 때를 방지
+        const startDate = tripData?.dateRange?.start;
+        if (!startDate) return {};
+
+        let base = new Date(startDate);
+        base.setHours(0, 0, 0, 0);
+
+        items.forEach((item) => {
+          let day = 1;
+          if (item.visit_date) {
+            const v = new Date(item.visit_date);
+            v.setHours(0, 0, 0, 0);
+            const diff = Math.floor((v.getTime() - base.getTime()) / 86400000);
+            day = diff + 1;
+          }
+
+          if (!newSchedule[day]) newSchedule[day] = [];
+          newSchedule[day].push({
+            id: item.id,
+            // 🔥 [수정] item.name이 NULL/Undefined일 경우 popup_id를 사용
+            name: item.name || `팝업 ID: ${item.popup_id}` || "장소명 없음", 
+            
+            // DB에 없는 필드도 안전하게 처리
+            location: item.address || '', 
+            period:
+              item.period_start && item.period_end
+                ? `${item.period_start} ~ ${item.period_end}`
+                : "", 
+            time:
+              item.open_time && item.close_time
+                ? `${item.open_time} ~ ${item.close_time}`
+                : "", 
+            lat: item.lat || null, 
+            lng: item.lng || null,
+            category: item.category || '',
+          });
+        });
+
+        return newSchedule;
+      },
+      // 🔥 [수정 2-A] tripData가 null일 경우 에러가 나지 않도록 안전하게 처리합니다.
+      [tripData?.dateRange?.start] 
+    );
+
+
+    /* -------------------------
+   4) 최초 로딩: localStorage 또는 state 기반
+  --------------------------- */
+  useEffect(() => {
+    if (!tripId) return;
+
+    let saved = JSON.parse(localStorage.getItem("trips") || "[]");
+    let storedTrip = saved.find((t: any) => String(t.id) === String(tripId));
+
+    let normalized: any = null;
+
+    // 🔥 [수정 1] location.state (initialTripState)를 최우선으로 사용합니다.
+    if (initialTripState) {
+        // location.state에 최신 정보가 있다면 바로 사용
+        normalized = normalizeTripData(initialTripState);
+    } else if (storedTrip) {
+        // location.state가 없으면 localStorage 데이터 사용
+        normalized = normalizeTripData(storedTrip);
     }
-  }, [tripData]);
 
+    if (!normalized) return;
+
+    setTripData(normalized);
+    setTripImage(normalized.imageUrl || defaultTripImg);
+    
+    // DB에서 일정이 로드되기 전까지는 localStorage에 있는 일정이라도 표시
+    if (Object.keys(normalized.schedule || {}).length > 0) {
+        setSchedule(normalized.schedule);
+    }
+
+  }, [tripId, initialTripState]); // 의존성 유지
+
+    /* -------------------------
+     7) 일정 DB에서 불러오기 (useEffect)
+    --------------------------- */
+    useEffect(() => {
+    // 🔥 tripData가 null이 아닐 때만 실행
+    if (!tripData || !tripData.id) return;
+    
+    async function fetchSchedule() {
+      const res = await fetch("/api/get-trip-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // tripData가 유효할 때만 값 전달
+        body: JSON.stringify({ userId: tripData.userId || "test001", tripId: tripData.id }),
+      });
+          const json = await res.json();
+          if (json.items) {
+            setSchedule(convertDBItemsToSchedule(json.items));
+          }
+        }
+
+        fetchSchedule();
+    }, [tripData, tripId, convertDBItemsToSchedule]); // tripData를 의존성에 추가
+
+    // useEffect for drag/schedule sync (Moved here)
+    useEffect(() => {
+      if (tripData?.schedule) {
+        setSchedule(tripData.schedule);
+      }
+    }, [tripData]);
+
+
+    // ===================================================
+    // 🔥 [수정 3] 조건부 반환은 모든 Hooks 호출 이후에만 위치해야 합니다.
+    // ===================================================
+
+    if (!tripData) {
+      return (
+        <div className="p-10 text-center">
+          <MapPinOff className="w-8 h-8 text-gray-300 mb-4 mx-auto" />
+          여행 정보를 불러올 수 없습니다.
+        </div>
+      );
+    }
   // ===============================
   // 🔥 편집 모드 & 드래그 상태
-  // ===============================
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [localSchedule, setLocalSchedule] = useState<any>(
-    tripData?.schedule || {}
-  );
+  // ==============================
+  
 
-  const dragItem = useRef<{ day: number; index: number } | null>(null);
-  const dragOverItem = useRef<{ day: number; index: number } | null>(null);
-
-  useEffect(() => {
-    if (tripData?.schedule) {
-      setLocalSchedule(tripData.schedule);
-    }
-  }, [tripData]);
-
+  
   // 🖱️ 드래그 시작
   const handleDragStart = (
     e: React.DragEvent<HTMLDivElement>,
@@ -166,7 +241,7 @@ const tripData = rawTrip
     const source = dragItem.current;
     if (source.day === targetDay && source.index === targetIndex) return;
 
-    setLocalSchedule((prev: any) => {
+    setSchedule((prev: any) => {
       const newSchedule: any = { ...prev };
 
       const sourceList = [...(newSchedule[source.day] || [])];
@@ -209,18 +284,17 @@ const tripData = rawTrip
 
     const trips = JSON.parse(localStorage.getItem("trips") || "[]");
     const idx = trips.findIndex(
-      (t: any) =>
-        String(t.id) === String(tripData?.id) ||
-        String(t.tripNo) === String(tripData?.tripNo)
+      (t: any) => String(t.id) === String(tripData?.id)
     );
 
+
     if (idx !== -1) {
-      trips[idx].schedule = localSchedule;
+      trips[idx].schedule = schedule;
       localStorage.setItem("trips", JSON.stringify(trips));
 
-      navigate(".", {
+     navigate(".", {
         state: { tripData: { ...trips[idx] } },
-        replace: true,
+        replace: false
       });
     }
 
@@ -260,42 +334,151 @@ const tripData = rawTrip
   };
 
   // 날짜 계산
-  const startDate = tripData.dateRange.start;
+   const startDate = tripData.dateRange.start;
   const endDate = tripData.dateRange.end;
-  const isValidDate = startDate && endDate;
-  const dayCount = isValidDate
-    ? (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24) + 1
-    : 0;
+  const dayCount =
+    startDate && endDate
+      ? Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1
+      : 0;
+
   const days =
-    isValidDate && dayCount > 0
+    startDate && endDate
       ? Array.from({ length: dayCount }, (_, i) => {
-          const date = new Date(startDate!);
-          date.setDate(startDate!.getDate() + i);
+          const d = new Date(startDate);
+          d.setDate(startDate.getDate() + i);
           return {
             day: i + 1,
-            date: `${String(date.getMonth() + 1).padStart(2, "0")}.${String(
-              date.getDate()
-            ).padStart(2, "0")}`,
+            date: `${d.getMonth() + 1}.${d.getDate()}`,
           };
         })
       : [];
+      // =============================================
+// AI 일정 최적화 API 요청
+// =============================================
+async function handleGenerateAITrip() {
+  if (!tripData) {
+    alert("여행 정보가 없습니다.");
+    return;
+  }
+
+  const userId = tripData.userId; // ✔ 사용자 ID
+  const tripId = tripData.id;     // ✔ 여행 ID
+
+  // ✔ 날짜 검증
+  if (!tripData.dateRange.start || !tripData.dateRange.end) {
+    alert("여행 날짜 정보가 잘못되었습니다.");
+    return;
+  }
+
+  const s = new Date(tripData.dateRange.start);
+    const tripStart = `${s.getFullYear()}-${String(s.getMonth()+1).padStart(2,'0')}-${String(s.getDate()).padStart(2,'0')}`;
+    
+    const e = new Date(tripData.dateRange.end);
+    const tripEnd = `${e.getFullYear()}-${String(e.getMonth()+1).padStart(2,'0')}-${String(e.getDate()).padStart(2,'0')}`;
+
+  try {
+    const res = await fetch("/api/optimize-trip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, tripId, tripStart, tripEnd }),
+    });
+
+    const json = await res.json();
+console.log("👉 AI 서버 응답 전체:", json); // 전체 응답 구조 확인
+console.log("👉 AI 생성된 Route 데이터:", json.route); // Route 데이터 내용 확인
+
+    if (!json.ok) {
+      alert("AI 일정 생성 실패");
+      return;
+    }
+
+    const serverRoute = json.route;
+    const newSchedule = convertRouteToLocalSchedule(serverRoute);
+
+    setSchedule(newSchedule);
+
+    // localStorage 반영
+    const trips = JSON.parse(localStorage.getItem("trips") || "[]");
+    const idx = trips.findIndex((t) => String(t.id) === String(tripId));
+    if (idx !== -1) {
+      trips[idx].schedule = newSchedule;
+      localStorage.setItem("trips", JSON.stringify(trips));
+    }
+
+    alert("AI 일정이 생성되었습니다!");
+  } catch (err) {
+    console.error(err);
+    alert("AI 최적화 중 오류 발생");
+  }
+}
+
+// =============================================
+// 서버 route → MyTrip localSchedule 변환
+// route = { "2025-12-24": [...], "2025-12-25": [...] }
+// localSchedule = { 1: [...], 2: [...] }
+// =============================================
+function convertRouteToLocalSchedule(route) {
+  const dates = Object.keys(route).sort();
+  const schedule = {};
+
+  dates.forEach((dateStr, index) => {
+    const items = route[dateStr].map((it) => ({
+      ...it,
+      name: it.name || it.popup_name || it.title || "이름 없음",
+      location: it.address || it.location || "",
+      period: it.period_start && it.period_end
+        ? `${it.period_start} ~ ${it.period_end}`
+        : "",
+    }));
+
+    schedule[index + 1] = items;
+  });
+
+  return schedule;
+}
+
+  /* -------------------------
+     8) 이미지 업로드 저장 기능
+  --------------------------- */
+  const handleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+
+      setTripImage(base64);
+      setTripData((prev: any) => ({ ...prev, imageUrl: base64 }));
+
+      // localStorage 반영
+      const trips = JSON.parse(localStorage.getItem("trips") || "[]");
+      const idx = trips.findIndex((t: any) => String(t.id) === String(tripData.id));
+      if (idx !== -1) {
+        trips[idx].imageUrl = base64;
+        localStorage.setItem("trips", JSON.stringify(trips));
+      }
+    };
+
+    reader.readAsDataURL(file);
+  };
 
   return (
     <div className="min-h-screen bg-[#F2F4F5] flex flex-col max-w-md mx-auto relative pb-60">
       {/* 상단 이미지 섹션 */}
       <div className="fixed top-0 left-0 w-full max-w-md h-[190px] z-50">
         <img
-          src={tripImage || DEFAULT_TRIP_IMAGE}
+          src={tripImage || defaultTripImg}
           alt="여행 이미지"
           className="absolute top-0 inset-0 w-full h-full object-cover"
           onError={(e) => {
-            e.currentTarget.src = DEFAULT_TRIP_IMAGE;
+            e.currentTarget.src = defaultTripImg;
           }}
         />
         <div className="absolute top-0 inset-0 bg-gradient-to-t from-black/60 via-black/50 to-transparent" />
         <div className="absolute bottom-5 left-0 right-0 text-center text-white px-6">
           <h2 className="font-bold text-[20px] drop-shadow-md">
-            {tripData.country} {tripData.city} 여행
+            {tripData.country} {tripData.city} 여행 
           </h2>
           <p className="text-[14px] mt-1 opacity-90">
             {tripData.dateRange.text ||
@@ -321,8 +504,13 @@ const tripData = rawTrip
 
         {/* 뒤로가기 버튼 */}
         <button
-          onClick={() => navigate("/", { replace: true })}
-          className="absolute bottom-12 left-4 text-white p-2 rounded-full bg-transparent hover:border-none active:outline-none active:shadow-lg"
+        type="button" // 🔥 필수: 명시적 버튼 타입 지정
+        onClick={(e) => {
+          e.stopPropagation(); // 이벤트 전파 방지
+          navigate("/", { replace: true });
+        }}
+          className="absolute bottom-12 left-4 text-white p-2 rounded-full bg-transparent hover: transition duration-300 focus:outline-none 
+          hover:border-none active:outline-none active:shadow-lg"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -345,7 +533,7 @@ const tripData = rawTrip
       <div className="flex flex-col gap-2 px-5 mt-[210px]">
         {days.length > 0 ? (
           days.map((d, index) => {
-            const placesForDay = localSchedule[d.day] || [];
+            const placesForDay = schedule[d.day] || [];
 
             return (
               <div
@@ -390,7 +578,7 @@ const tripData = rawTrip
                   {/* AI 버튼 (편집 모드 아닐 때만) */}
                   {!isEditMode && index === 0 && (
                     <button
-                      onClick={() => alert("AI 추천")}
+                      onClick={handleGenerateAITrip}
                       className="px-3 py-1 rounded-full bg-gradient-to-r from-[#4facfe] to-[#00f2fe] text-white text-[11px] font-bold shadow-sm"
                     >
                       AI 일정 생성
@@ -500,27 +688,27 @@ const tripData = rawTrip
 
       {/* 챗봇 버튼 */}
       <button
-        onClick={() => {
-          const trips = JSON.parse(localStorage.getItem("trips") || "[]");
-          const foundTrip = trips.find(
-            (t: any) => String(t.id) === String(tripData.id)
-          );
-          navigate("/chatbot", {
-  state: {
-    tripData: {
-      ...foundTrip,
-      dateRange: foundTrip.dateRange ? {
-        start: foundTrip.dateRange.start ? new Date(foundTrip.dateRange.start) : null,
-        end: foundTrip.dateRange.end ? new Date(foundTrip.dateRange.end) : null,
-        text: foundTrip.dateRange.text ?? "",
-      } : null
+  type="button" // 🔥 필수
+  onClick={(e) => {
+    e.stopPropagation();
+    
+    // id가 유효한지 확인 후 이동
+    if (tripData && tripData.id) {
+      navigate("/chatbot", { 
+        state: { 
+          id: tripData.id,      // ID도 보내고
+          tripData: tripData    // 🔥 여행 데이터 전체 객체도 꼭 같이 보내야 함!
+        }, 
+        replace: false 
+      });
+    } else {
+      alert("여행 정보를 찾을 수 없습니다.");
     }
-  },
-  replace: true
-});
-
-        }}
-        className="fixed bottom-9 right-8 rounded-full w-[62px] h-[62px] border-2 border-dashed border-gray-300 bg-white shadow-xl hover:bg-gray-50 flex items-center justify-center"
+  }}
+        className="fixed bottom-9 right-8 rounded-full w-[62px] h-[62px] border-2  bg-white shadow-xl
+        transition-all duration-100 focus:outline-none focus:ring-0 
+                  active:scale-100 hover:bg-gray-50 hover:border-blue-400
+                  flex items-center justify-center"
       >
         <img
           src={chatbotIcon}

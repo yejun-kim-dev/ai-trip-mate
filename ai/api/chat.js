@@ -125,11 +125,14 @@ router.post("/", async (req, res) => {
     });
 
     const recommendations = uniqueResults.slice(0, 5).map((popup) => ({
+      id: popup.id,                                      // 🔥 popup_id 추가 필수
       title: popup.name || popup.title || "제목 없음",
       period: popup.period || "기간 정보 없음",
-      location: popup.location || "장소 없음",
+      location: popup.location || popup.address || "장소 없음",
       category: popup.category || category,
+      type: popup.category || "추천",                     // 프론트에서 사용 중
     }));
+
 
     console.log("🎯 최종 추천:", recommendations.length);
 

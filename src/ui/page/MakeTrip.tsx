@@ -1,12 +1,12 @@
 "use client";
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-
+import { useLocation, useNavigate } from "react-router-dom";
 import SelectCountry from "../component/SelectCountry";
 import SelectCity from "../component/SelectCity";
 import SelectDate from "../component/SelectDate";
 import TripCompanion from "../component/SelectCompanion";
 import defaultTripImg from "../component/images/tripbasicimage.png";
+import { USER_ID } from "../../data/user";
 
 interface Companions {
   [key: string]: number;
@@ -27,8 +27,14 @@ interface TripState {
 export default function MakeTrip() {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const location = useLocation();
   const [errorMessage, setErrorMessage] = useState("");
-
+  
+  const country = location.state?.country;
+  const city = location.state?.city;
+  const startDate = location.state?.startDate;
+  const endDate = location.state?.endDate;
+const companions = location.state?.companions || {};
   const [tripData, setTripData] = useState<TripState>({
     country: "",
     city: "",
@@ -78,79 +84,92 @@ export default function MakeTrip() {
 
   // ⚡ 여행 생성 버튼 클릭 핸들러
 // ⚡ 여행 생성 버튼 클릭 핸들러
-const handleCreateTrip = async () => {
-  if (
-    !tripData.country ||
-    !tripData.city ||
-    !tripData.dateRange.start ||
-    !tripData.dateRange.end ||
-    totalCompanions === 0
-  ) {
-    setErrorMessage("모든 항목을 입력해주세요.");
-    setTimeout(() => setErrorMessage(""), 2500);
-    return;
-  }
+// ⚡ 여행 생성 버튼 클릭 핸들러 (수정됨)
+  const handleCreateTrip = async () => {
+    // 1. 유효성 검사
+    if (
+      !tripData.country ||
+      !tripData.city ||
+      !tripData.dateRange.start ||
+      !tripData.dateRange.end ||
+      totalCompanions === 0
+    ) {
+      setErrorMessage("모든 항목을 입력해주세요.");
+      setTimeout(() => setErrorMessage(""), 2500);
+      return;
+    }
 
-  setIsLoading(true);
-  setErrorMessage("");
+    setIsLoading(true);
+    setErrorMessage("");
 
-  try {
-    const formattedStart = formatDate(tripData.dateRange.start);
-    const formattedEnd = formatDate(tripData.dateRange.end);
+    try {
+      // 날짜 포맷팅 (서버 전송용)
+      const formattedStart = formatDate(tripData.dateRange.start);
+      const formattedEnd = formatDate(tripData.dateRange.end);
 
-    const response = await fetch("http://localhost:8000/api/trip/create", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        userId: "user001", // 로그인 생기면 바꾸면 됨
-        country: tripData.country,
-        city: tripData.city,
-        startDate: formattedStart,
-        endDate: formattedEnd,
-        companions: tripData.companions,
-      }),
-    });
+      // 2. 서버로 데이터 전송
+      const response = await fetch("http://localhost:8000/api/trip/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: USER_ID, 
+          country: tripData.country,
+          city: tripData.city,
+          startDate: formattedStart,
+          endDate: formattedEnd,
+          companions: tripData.companions,
+        }),
+      });
 
-    const data = await response.json();
+      // 서버 응답 확인 (서버가 없거나 실패해도 로컬에는 저장되도록 try-catch 안에서 처리)
+      const data = await response.json().catch(() => ({ trip: null }));
+      
+      // 🔥 [핵심 수정 1] ID 생성 (로컬 스토리지와 네비게이션에 동일한 ID 사용)
+      const newTripId = Date.now();
 
-    if (!data.trip) {
-      throw new Error("여행 생성 실패");
-    }
-    // 1) 기존 trips 불러오기
-const existingTrips = JSON.parse(localStorage.getItem("trips") || "[]");
+      // 1) 기존 trips 불러오기
+      const existingTrips = JSON.parse(localStorage.getItem("trips") || "[]");
 
-// 2) 새 여행에 기본 이미지 붙여주기
-const newTrip = {
-  ...data.trip,
-  imageUrl: defaultTripImg,  // 없으면 기본 이미지
-};
+      // 🔥 [핵심 수정 2] location.state 변수가 아니라, 현재 state(tripData) 값을 사용해야 함
+      const newTrip = {
+        id: newTripId, // 위에서 만든 ID 사용
+        userId: USER_ID,
+        country: tripData.country, // 변수명 country -> state인 tripData.country
+        city: tripData.city,       // 변수명 city -> tripData.city
+        dateRange: {
+          start: tripData.dateRange.start,
+          end: tripData.dateRange.end,
+          text: `${formattedStart} ~ ${formattedEnd}`, // 포맷팅된 날짜 문자열 저장
+        },
+        companions: tripData.companions,
+        imageUrl: defaultTripImg,
+        schedule: {}
+      };
 
-// 3) trips 배열에 추가해서 저장
-existingTrips.push(newTrip);
-localStorage.setItem("trips", JSON.stringify(existingTrips));
+      // 3) trips 배열에 추가해서 저장
+      existingTrips.push(newTrip);
+      localStorage.setItem("trips", JSON.stringify(existingTrips));
 
-// 4) MyTrip 페이지로 이동
-navigate("/mytrip", { state: { tripData: newTrip } });
+      // 4) MyTrip 페이지로 이동
+      // 🔥 [핵심 수정 3] localStorage에 저장한 것과 똑같은 ID를 넘겨줘야 MyTrip이 데이터를 찾음
+      navigate("/mytrip", {
+        replace: false, // 뒤로가기 가능하게 하려면 false
+        state: {
+          id: newTripId, // Date.now()로 생성한 ID 전달
+          tripData: newTrip // 바로 사용할 수 있도록 데이터도 전달
+        }
+      });
 
+    } catch (err) {
+      console.error(err);
+      setErrorMessage("여행 생성 중 오류 발생");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    navigate("/mytrip", { 
-  state: { 
-    tripData: {
-      ...data.trip,
-      imageUrl: defaultTripImg
-    }
-  } 
-});
-
-  } catch (err) {
-    console.error(err);
-    setErrorMessage("여행 생성 중 오류 발생");
-  } finally {
-    setIsLoading(false);
-  }
-};
   return (
     <div className="min-h-screen bg-[#FFFDFD] flex flex-col max-w-md mx-auto relative pb-[100px]">
       {/* ✅ 헤더 */}

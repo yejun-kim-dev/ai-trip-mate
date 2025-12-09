@@ -85,6 +85,7 @@ export async function createConversationChain(userId) {
 2. 행사 정보는 서버가 recommendations로 보내므로 text에는 질문에 대한 간단한 답 문장을 작성합니다.
 3. 검색 결과가 없어도 "있습니다/없습니다" 같은 단정 표현 금지. 자연스럽게 설명만.
 4. 팝업/전시/공연 등 사용자가 언급한 카테고리로 답변의 맥락을 유지하세요.
+5. 사용자의 오타도 유추하여 대답하세요.
 
 [사용자 기억]
 ${memoryText}

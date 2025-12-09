@@ -1,39 +1,24 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-// ✅ 1. 'TripState' 타입과 'defaultTrips'를 data 파일에서 가져옵니다.
-import { defaultTrips, TripState } from "../component/data/dummyTrips";
+// ✅ TripState 타입은 그대로 사용
+import { TripState } from "../component/data/dummyTrips";
 import chatbotIcon from "../component/images/chatbot_icon.png";
 import defaultTripImg from "../component/images/tripbasicimage.png";
+import { USER_ID } from "../../data/user"; 
 
-// ❌ 2. 개별 이미지는 import할 필요 없습니다. (dummyTrips에 URL이 포함되어 있음)
-// import tripimage_sampleImg from "../component/images/tripimage_sample.jpg";
-// import tripbox_sampleImg from "../component/images/tripbox_sample.jpg";
-
-// ✅ 3. 헬퍼 함수들은 그대로 사용합니다. (MyTrip에서도 동일하게 사용)
+// 헬퍼 함수들 (그대로 유지)
 const getCompanionSummary = (companions: Record<string, number> = {}) => {
   const entries = Object.entries(companions).filter(([_, v]) => v > 0);
-
   if (entries.length === 0) return "혼자 여행";
-
   const labelMap: Record<string, string> = {
-    friends: "친구",
-    family: "가족",
-    couple: "연인",
-    youth: "청소년",
-    children: "어린이",
-    elderly: "노약자",
-    others: "지인",
+    friends: "친구", family: "가족", couple: "연인", youth: "청소년",
+    children: "어린이", elderly: "노약자", others: "지인",
   };
-
-  // 첫 번째 관계만 표시
   const [key, value] = entries[0];
   const firstText = `${labelMap[key] || key} ${value}명`;
-
-  // 여러 개면 "외 ..."로 축약
   return entries.length > 1 ? `${firstText} 외 ...` : `${firstText}과 함께`;
 };
-
 
 const formatDateRange = (startStr: string | Date | null, endStr: string | Date | null) => {
   if (!startStr || !endStr) return "날짜 미정";
@@ -41,12 +26,8 @@ const formatDateRange = (startStr: string | Date | null, endStr: string | Date |
     const start = new Date(startStr);
     const end = new Date(endStr);
     if (isNaN(start.getTime()) || isNaN(end.getTime())) return "날짜 미정";
-    
     const fmt = (d: Date) =>
-      `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(
-        d.getDate()
-      ).padStart(2, "0")}`;
-    
+      `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
     return `${fmt(start)} - ${fmt(end)}`;
   } catch (error) {
     console.error("날짜 변환 오류:", error);
@@ -55,43 +36,69 @@ const formatDateRange = (startStr: string | Date | null, endStr: string | Date |
 };
 
 export default function Home() {
-  // ✅ 4. state의 타입을 TripState 배열로 명시합니다.
+  // ✅ 4. State는 하나로 통일합니다. (UI 렌더링용)
   const [trips, setTrips] = useState<TripState[]>([]);
   const navigate = useNavigate();
 
-  // ✅ 5. [핵심 수정] localStorage 로딩 및 데이터 포맷팅 로직 수정
+  // ✅ 5. [핵심 수정] DB에서 데이터 가져오기 (localStorage 로직 제거)
   useEffect(() => {
-    let storedTrips: TripState[] = [];
-    
-    // 🐞 [버그 수정] JSON.parse는 에러를 유발할 수 있으므로 try...catch로 감쌉니다.
-    // 이것이 "페이지가 보이지 않던" 주된 원인일 가능성이 높습니다.
-    try {
-      const storedData = localStorage.getItem("trips") || "[]";
-      storedTrips = JSON.parse(storedData);
-      
-      // 🚨 localStorage 데이터가 TripState[] 형식이 아닐 경우를 대비
-      if (!Array.isArray(storedTrips)) {
-        storedTrips = [];
-      }
+    async function fetchDBTrips() {
+      try {
+        console.log("🚀 DB 여행 목록 요청 중...");
+        
+        const res = await fetch("/api/get-my-trips", {
+    method: "POST", // 🔥 여기가 POST로 되어 있는지 확인!
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId: USER_ID || "user001" }),
+});
+        
+        const json = await res.json();
+        console.log("📦 DB 응답:", json);
 
-    } catch (error) {
-      console.error("localStorage 파싱 에러:", error);
-      storedTrips = []; // 👈 오류 발생 시 빈 배열로 초기화
-      localStorage.removeItem("trips"); // 👈 손상된 데이터 제거
+        if (json.ok && json.trips) {
+          // 🔥 DB 데이터를 기존 UI(TripState) 포맷에 맞게 변환 (매핑)
+          const dbTrips: TripState[] = json.trips.map((t: any) => ({
+  id: t.id,
+  tripNo: t.id,
+  userId: t.user_id,
+  country: t.country,
+  city: t.city,
+
+  // 🔥 MyTrip이 기대하는 dateRange 구조 그대로
+  dateRange: {
+    start: t.start_date ? new Date(t.start_date) : null,
+    end: t.end_date ? new Date(t.end_date) : null,
+    text: t.start_date && t.end_date
+      ? formatDateRange(t.start_date, t.end_date)
+      : "날짜 미정",
+  },
+
+  // 이미지
+  imageUrl: t.imageUrl || t.image_url || defaultTripImg,
+
+  // companions 저장 컬럼이 아직 없다면 임시로 빈 객체 유지
+  companions: t.companions ? t.companions : {},
+}));
+
+
+          // 변환된 데이터를 상태에 저장 -> 화면 갱신
+          setTrips(dbTrips);
+        }
+      } catch (err) {
+        console.error("❌ 여행 목록 로드 실패:", err);
+        // 에러 시 빈 배열 유지
+        setTrips([]);
+      }
     }
 
-    // ✅ 6. [로직 수정] 데이터를 변환하지 않고 '원본(raw)' 상태로 합칩니다.
-    // MyTrip 페이지는 원본 TripState 객체를 필요로 합니다.
-    setTrips(storedTrips);
+    fetchDBTrips();
+  }, []); 
 
-    
-  }, []); // 👈 의존성 배열은 비어있는 것이 맞습니다 (마운트 시 1회 실행)
-
-  // ✅ 7. [로직 수정] 클릭 핸들러가 원본 'trip' 객체를 전달합니다.
+  // ✅ 6. 핸들러는 그대로 유지 (DB에서 받은 데이터를 그대로 넘김)
   const handleTripClick = (trip: TripState) => {
-    console.log("🧭 선택된 여행 (원본 데이터):", trip);
-    // 👈 'trip.raw' 같은 복잡한 로직 없이, 원본 객체(TripState)를 그대로 전달
-    navigate("/mytrip", { state: { tripData: trip } });
+    console.log("🧭 선택된 여행:", trip);
+    // MyTrip 페이지로 ID와 데이터 전달
+    navigate("/mytrip", { state: { id: trip.id, tripData: trip } });
   };
 
   const handleCreateTrip = () => {
@@ -99,6 +106,7 @@ export default function Home() {
     navigate("/maketrip");
   };
 
+  // ✅ 7. UI 렌더링 (건드리지 않음)
   return (
     <div className="flex flex-col items-center min-h-screen bg-[#FFFDFD] p-4 pb-24">
       {/* 헤더 */}
@@ -112,10 +120,9 @@ export default function Home() {
       {/* 여행 목록 */}
       <div className="w-full flex flex-col items-center gap-3 mb-8">
         {trips.length > 0 ? (
-          // ✅ 8. [로직 수정] map 안에서 데이터를 화면에 맞게 '표시용'으로 변환합니다.
           trips.map((trip: TripState) => (
             <div
-              key={trip.id} // 👈 key는 index보다 고유 ID(trip.id)를 사용
+              key={trip.id} 
               onClick={() => handleTripClick(trip)}
               className="relative w-[96%] max-w-[420px] h-[150px] rounded-xl shadow-xl overflow-hidden cursor-pointer transform transition duration-300 hover:scale-[1.02]"
             >
@@ -153,7 +160,7 @@ export default function Home() {
           ))
         ) : (
           <p className="text-[#B0B0B0] mt-20 text-[14px]">
-            아직 등록된 여행이 없습니다.
+            불러올 여행이 없습니다.
           </p>
         )}
       </div>

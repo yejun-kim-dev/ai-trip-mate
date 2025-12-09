@@ -1,129 +1,73 @@
-// src/ai/api/tripOptimizeRoute.js
+
 import express from "express";
-import { fetchUserTripItems } from "./services/tripService.js";
-import { allocateDates } from "../utils/allocateDates.js";
-import { strToDate, dateToStr } from "../utils/dateUtils.js";
+import { fetchUserTripItems } from "../services/tripService.js";
 
 const router = express.Router();
 
-/** 카테고리 헬퍼 */
-const IS_POPUP = (item) => item.category === "관광";
-const IS_FOOD = (item) => item.category === "식당";
-const IS_HOTEL = (item) => item.category === "숙박";
-
-/** 2박 3일용 날짜 리스트 만들기 */
-function buildThreeDays(tripStart) {
-  const start = strToDate(tripStart);
-  const days = [];
-  for (let i = 0; i < 3; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    days.push(dateToStr(d)); // "2025-12-24" 같은 문자열
+/* ============================================================
+   🛠️ [유틸] 날짜 배열 생성기 (예: 12.23 ~ 12.25 -> 3일치 날짜 리스트)
+============================================================ */
+function getDaysArray(start, end) {
+  const arr = [];
+  const dt = new Date(start);
+  const endDt = new Date(end);
+  
+  while (dt <= endDt) {
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const d = String(dt.getDate()).padStart(2, "0");
+    arr.push(`${y}-${m}-${d}`);
+    dt.setDate(dt.getDate() + 1);
   }
-  return days;
+  return arr;
 }
 
-/** 식당과 팝업을 섞어서 하나의 하루 리스트로 만들기 */
-function mergeRestaurantsAndPopups(restaurants, popups) {
-  const result = [];
-  let r = 0;
-  let p = 0;
-
-  // 간단한 규칙:
-  // 식당 하나 → 팝업 하나 → 팝업 하나 → 식당 하나 → 팝업 하나 → ...
-  while (r < restaurants.length || p < popups.length) {
-    if (r < restaurants.length) {
-      result.push(restaurants[r++]);
-    }
-    if (p < popups.length) {
-      result.push(popups[p++]);
-    }
-    if (p < popups.length) {
-      result.push(popups[p++]);
-    }
-  }
-
-  // 남은 팝업이 있으면 뒤에 붙이기
-  while (p < popups.length) {
-    result.push(popups[p++]);
-  }
-
-  return result;
-}
-
-/** 하루 리스트에 visit_order랑 visit_date 달아주기 */
-function applyVisitOrderAndDate(list, dateStr) {
-  return list.map((item, idx) => ({
-    ...item,
-    visit_date: dateStr,
-    visit_order: idx + 1,
-  }));
-}
-
+/* ============================================================
+   🤖 [AI 엔진] 단순 균등 분배 로직 (무조건 채워넣기)
+============================================================ */
 router.post("/optimize-trip", async (req, res) => {
   try {
     const { userId, tripStart, tripEnd } = req.body;
 
-    // 시연용: 무조건 2박 3일이라고 가정
-    const days = buildThreeDays(tripStart); // [day1, day2, day3]
-    const firstDay = days[0];
-    const lastDay = days[2];
+    console.log(`🤖 AI 최적화 요청: ${userId}, ${tripStart} ~ ${tripEnd}`);
 
-    // 1. DB에서 전체 아이템 가져오기
+    // 1. 여행 날짜 리스트 생성
+    const days = getDaysArray(tripStart, tripEnd);
+    const totalDays = days.length;
+
+    // 2. DB에서 아이템 가져오기 (우리가 만든 tripService가 빈 값도 다 채워줌)
     const items = await fetchUserTripItems(userId, tripStart, tripEnd);
+    console.log(`📦 가져온 아이템 개수: ${items.length}개`);
 
-    // 2. 카테고리별로 분리
-    const popups = items.filter(IS_POPUP);
-    const foods = items.filter(IS_FOOD);
-    const hotels = items.filter(IS_HOTEL);
-
-    // 3. 팝업을 날짜별로 균등 분배 (period_start/period_end 범위 고려)
-    const popupByDate = allocateDates(popups, tripStart, tripEnd);
-
-    // 4. 식당/숙박은 기존 visit_date 기준으로 날짜별 분리
-    const foodByDate = {};
-    const hotelByDate = {};
-
-    for (const day of days) {
-      foodByDate[day] = [];
-      hotelByDate[day] = [];
+    // 3. 아이템이 하나도 없으면 빈 라우트 반환
+    if (items.length === 0) {
+      return res.json({ ok: true, route: {} });
     }
 
-    for (const f of foods) {
-      const d = f.visit_date || firstDay; // visit_date가 없으면 첫째날로
-      if (!foodByDate[d]) foodByDate[d] = [];
-      foodByDate[d].push(f);
-    }
+    // 4. 아이템 섞기 (랜덤성 추가 - 원치 않으면 제거 가능)
+    // items.sort(() => Math.random() - 0.5);
 
-    for (const h of hotels) {
-      const d = h.visit_date || firstDay;
-      if (!hotelByDate[d]) hotelByDate[d] = [];
-      hotelByDate[d].push(h);
-    }
-
-    // 5. 날짜별 최종 스케줄 구성
+    // 5. 날짜별로 아이템 분배 (N등분)
     const route = {};
+    
+    // 빈 날짜 미리 세팅
+    days.forEach(day => { route[day] = []; });
 
-    for (const day of days) {
-      const dayFoods = foodByDate[day] || [];
-      const dayPopups = popupByDate[day] || [];
-      const dayHotels = hotelByDate[day] || [];
+    // 아이템을 하루씩 돌아가며 넣기 (Round Robin)
+    items.forEach((item, index) => {
+      const dayIndex = index % totalDays; // 0, 1, 2, 0, 1, 2...
+      const targetDate = days[dayIndex];
+      
+      route[targetDate].push({
+        ...item,
+        visit_date: targetDate, // 날짜를 여행 날짜로 강제 변경
+        visit_order: route[targetDate].length + 1 // 순서 부여
+      });
+    });
 
-      // 5-1. 식당 + 팝업 섞기
-      let dayList = mergeRestaurantsAndPopups(dayFoods, dayPopups);
-
-      // 5-2. 숙박은 항상 마지막 (마지막 날은 시연용으로 제외하고 싶으면 조건)
-      if (day !== lastDay) {
-        for (const h of dayHotels) {
-          dayList.push(h);
-        }
-      }
-
-      // 5-3. visit_order, visit_date 세팅
-      route[day] = applyVisitOrderAndDate(dayList, day);
-    }
-
+    console.log("✅ 일정 생성 완료:", Object.keys(route));
     return res.json({ ok: true, route });
+
   } catch (err) {
     console.error("❌ optimize-trip error:", err);
     return res.status(500).json({ ok: false, error: "Internal server error" });

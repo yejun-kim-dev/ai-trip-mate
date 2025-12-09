@@ -33,85 +33,23 @@ export interface TripState {
     text?: string;
   };
   companions: Companions;
+  userId?: string;
   imageUrl?: string;
   schedule?: Schedule;
 }
 
-// ✅ 4. ✈️ 부산 여행 더미 데이터
-export const dummyBusanTrip: TripState = {
+// ✅ 5. ✈️ 제주도 여행 더미 데이터
+export const dummyJejuTrip: TripState = {
   id: 1,
   tripNo: 1, // ✅ 여행 번호 추가
   country: "대한민국",
-  city: "부산",
-  dateRange: {
-    start: "2025-12-23",
-    end: "2025-12-26",
-    text: "2025.12.23 ~ 2025.12.26",
-  },
-  companions: { friends: 1 },
-  imageUrl: tripbox_sampleImg,
-  schedule: {
-    1: [
-      {
-        id: "p1",
-        name: "해운대 해수욕장",
-        period: "2025.06.01 ~ 2025.08.31",
-        time: "09:00 - 18:00",
-        location: "부산광역시 해운대구",
-      },
-      {
-        id: "p2",
-        name: "더베이 101 (야경 명소)",
-        time: "18:00 - 22:00",
-        location: "부산광역시 해운대구 동백로 52",
-      },
-    ],
-    2: [
-      {
-        id: "p3",
-        name: "감천문화마을",
-        time: "10:00 - 17:00",
-        location: "부산광역시 사하구 감내2로 203",
-      },
-      {
-        id: "p4",
-        name: "국제시장 & 깡통시장 겨울축제",
-        period: "2025.12.20 ~ 2026.01.05",
-        time: "11:00 - 21:00",
-        location: "부산광역시 중구 신창동4가",
-      },
-    ],
-    3: [
-      {
-        id: "p5",
-        name: "광안리 해수욕장 (드론쇼)",
-        time: "19:00 - 20:30",
-        location: "부산광역시 수영구 광안해변로 219",
-      },
-      {
-        id: "p6",
-        name: "부산 불꽃축제",
-        period: "2025.12.25",
-        time: "20:00 - 21:30",
-        location: "광안대교 인근 해변",
-      },
-    ],
-    4: [],
-  },
-};
-
-// ✅ 5. ✈️ 제주도 여행 더미 데이터
-export const dummyJejuTrip: TripState = {
-  id: 2,
-  tripNo: 2, // ✅ 여행 번호 추가
-  country: "대한민국",
   city: "제주도",
   dateRange: {
-    start: "2024-08-10",
-    end: "2024-08-15",
-    text: "2024.08.10 ~ 2024.08.15",
+    start: "2025-12-24",
+    end: "2025-12-26",
+    text: "2025-12-24 ~ 2025-12-26",
   },
-  companions: { family: 3 },
+  companions: { alone: 1 },
   imageUrl: tripimage_sampleImg,
   schedule: {
     1: [
@@ -147,4 +85,4 @@ export const dummyJejuTrip: TripState = {
 };
 
 // ✅ 6. 홈 기본 여행 목록
-export const defaultTrips: TripState[] = [dummyBusanTrip, dummyJejuTrip];
+export const defaultTrips: TripState[] = [dummyJejuTrip];
