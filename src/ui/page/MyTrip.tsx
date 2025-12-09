@@ -7,7 +7,14 @@ import React, {
   ChangeEvent,
 } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { MapPinOff, Plus, Camera, Pencil, Check, GripVertical } from "lucide-react";
+import {
+  MapPinOff,
+  Plus,
+  Camera,
+  Pencil,
+  Check,
+  GripVertical,
+} from "lucide-react";
 
 import chatbotIcon from "../component/images/chatbot_icon.png";
 import defaultTripImg from "../component/images/tripbasicimage.png";
@@ -45,167 +52,159 @@ const normalizeTripData = (t: any) => {
   };
 };
 
-
 /* -------------------------
    2) 메인 컴포넌트
 --------------------------- */
 export default function MyTrip() {
-    // ===================================================
-    // 🔥 [수정 1] 모든 Hooks는 컴포넌트 최상단에 위치해야 합니다.
-    // ===================================================
-    const navigate = useNavigate();
-    const location = useLocation();
-    const fileInputRef = useRef<HTMLInputElement>(null);
+  // ===================================================
+  // 🔥 [수정 1] 모든 Hooks는 컴포넌트 최상단에 위치해야 합니다.
+  // ===================================================
+  const navigate = useNavigate();
+  const location = useLocation();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const tripId = location.state?.id || null;
-    const initialTripState = location.state?.tripData || null;
+  const tripId = location.state?.id || null;
+  const initialTripState = location.state?.tripData || null;
 
-    const [tripData, setTripData] = useState<any | null>(null);
-    const [schedule, setSchedule] = useState<any>({});
-    const [tripImage, setTripImage] = useState<string | null>(null);
-    const [isEditMode, setIsEditMode] = useState(false);
+  const [tripData, setTripData] = useState<any | null>(null);
+  const [schedule, setSchedule] = useState<any>({});
+  const [tripImage, setTripImage] = useState<string | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
 
-    const dragItem = useRef<{ day: number; index: number } | null>(null);
-    // 드래그 로직을 위해 dragOverItem도 Hooks 영역으로 올립니다.
-    const dragOverItem = useRef<{ day: number; index: number } | null>(null); 
-
-
-    /* -------------------------
+  const dragItem = useRef<{ day: number; index: number } | null>(null);
+  // 드래그 로직을 위해 dragOverItem도 Hooks 영역으로 올립니다.
+  const dragOverItem = useRef<{ day: number; index: number } | null>(
+    null
+  ); /* -------------------------
      6) DB 일정 → 로컬 일정 변환 함수 (useCallback)
        - tripData가 null일 수 있으므로 의존성 안전 처리
     --------------------------- */
-    const convertDBItemsToSchedule = useCallback(
-      (items: any[]) => {
-        const newSchedule: any = {};
-        
-        // 🚨 tripData가 null일 경우, base Date를 설정할 수 없습니다. 
-        // 하지만 이 함수는 tripData가 로드된 후에만 호출되어야 합니다.
-        // 현재 로직을 유지하며 tripData가 null일 때를 방지
-        const startDate = tripData?.dateRange?.start;
-        if (!startDate) return {};
 
-        let base = new Date(startDate);
-        base.setHours(0, 0, 0, 0);
+  const convertDBItemsToSchedule = useCallback(
+    (items: any[]) => {
+      const newSchedule: any = {};
 
-        items.forEach((item) => {
-          let day = 1;
-          if (item.visit_date) {
-            const v = new Date(item.visit_date);
-            v.setHours(0, 0, 0, 0);
-            const diff = Math.floor((v.getTime() - base.getTime()) / 86400000);
-            day = diff + 1;
-          }
+      // 🚨 tripData가 null일 경우, base Date를 설정할 수 없습니다.
+      // 하지만 이 함수는 tripData가 로드된 후에만 호출되어야 합니다.
+      // 현재 로직을 유지하며 tripData가 null일 때를 방지
+      const startDate = tripData?.dateRange?.start;
+      if (!startDate) return {};
 
-          if (!newSchedule[day]) newSchedule[day] = [];
-          newSchedule[day].push({
-            id: item.id,
-            // 🔥 [수정] item.name이 NULL/Undefined일 경우 popup_id를 사용
-            name: item.name || `팝업 ID: ${item.popup_id}` || "장소명 없음", 
-            
-            // DB에 없는 필드도 안전하게 처리
-            location: item.address || '', 
-            period:
-              item.period_start && item.period_end
-                ? `${item.period_start} ~ ${item.period_end}`
-                : "", 
-            time:
-              item.open_time && item.close_time
-                ? `${item.open_time} ~ ${item.close_time}`
-                : "", 
-            lat: item.lat || null, 
-            lng: item.lng || null,
-            category: item.category || '',
-          });
-        });
+      let base = new Date(startDate);
+      base.setHours(0, 0, 0, 0);
 
-        return newSchedule;
-      },
-      // 🔥 [수정 2-A] tripData가 null일 경우 에러가 나지 않도록 안전하게 처리합니다.
-      [tripData?.dateRange?.start] 
-    );
+      items.forEach((item) => {
+        let day = 1;
+        if (item.visit_date) {
+          const v = new Date(item.visit_date);
+          v.setHours(0, 0, 0, 0);
+          const diff = Math.floor((v.getTime() - base.getTime()) / 86400000);
+          day = diff + 1;
+        }
 
+        if (!newSchedule[day]) newSchedule[day] = [];
+        newSchedule[day].push({
+          id: item.id, // 🔥 [수정] item.name이 NULL/Undefined일 경우 popup_id를 사용
+          name: item.name || `팝업 ID: ${item.popup_id}` || "장소명 없음", // DB에 없는 필드도 안전하게 처리
+          location: item.address || "",
+          period:
+            item.period_start && item.period_end
+              ? `${item.period_start} ~ ${item.period_end}`
+              : "",
+          time:
+            item.open_time && item.close_time
+              ? `${item.open_time} ~ ${item.close_time}`
+              : "",
+          lat: item.lat || null,
+          lng: item.lng || null,
+          category: item.category || "",
+        });
+      });
 
-    /* -------------------------
+      return newSchedule;
+    }, // 🔥 [수정 2-A] tripData가 null일 경우 에러가 나지 않도록 안전하게 처리합니다.
+    [tripData?.dateRange?.start]
+  ); /* -------------------------
    4) 최초 로딩: localStorage 또는 state 기반
   --------------------------- */
-  useEffect(() => {
-    if (!tripId) return;
 
-    let saved = JSON.parse(localStorage.getItem("trips") || "[]");
-    let storedTrip = saved.find((t: any) => String(t.id) === String(tripId));
+  useEffect(() => {
+    if (!tripId) return;
 
-    let normalized: any = null;
+    let saved = JSON.parse(localStorage.getItem("trips") || "[]");
+    let storedTrip = saved.find((t: any) => String(t.id) === String(tripId));
+
+    let normalized: any = null;
 
     // 🔥 [수정 1] location.state (initialTripState)를 최우선으로 사용합니다.
     if (initialTripState) {
-        // location.state에 최신 정보가 있다면 바로 사용
-        normalized = normalizeTripData(initialTripState);
+      // location.state에 최신 정보가 있다면 바로 사용
+      normalized = normalizeTripData(initialTripState);
     } else if (storedTrip) {
-        // location.state가 없으면 localStorage 데이터 사용
-        normalized = normalizeTripData(storedTrip);
+      // location.state가 없으면 localStorage 데이터 사용
+      normalized = normalizeTripData(storedTrip);
     }
 
     if (!normalized) return;
 
     setTripData(normalized);
     setTripImage(normalized.imageUrl || defaultTripImg);
-    
+
     // DB에서 일정이 로드되기 전까지는 localStorage에 있는 일정이라도 표시
     if (Object.keys(normalized.schedule || {}).length > 0) {
-        setSchedule(normalized.schedule);
+      setSchedule(normalized.schedule);
     }
+  }, [tripId, initialTripState]); // 의존성 유지
 
-  }, [tripId, initialTripState]); // 의존성 유지
-
-    /* -------------------------
+  /* -------------------------
      7) 일정 DB에서 불러오기 (useEffect)
     --------------------------- */
-    useEffect(() => {
+  useEffect(() => {
     // 🔥 tripData가 null이 아닐 때만 실행
     if (!tripData || !tripData.id) return;
-    
-    async function fetchSchedule() {
-      const res = await fetch("/api/get-trip-items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // tripData가 유효할 때만 값 전달
-        body: JSON.stringify({ userId: tripData.userId || "test001", tripId: tripData.id }),
-      });
-          const json = await res.json();
-          if (json.items) {
-            setSchedule(convertDBItemsToSchedule(json.items));
-          }
-        }
 
-        fetchSchedule();
-    }, [tripData, tripId, convertDBItemsToSchedule]); // tripData를 의존성에 추가
+    async function fetchSchedule() {
+      const res = await fetch("http://localhost:8000/api/get-trip-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: tripData.userId,
+          tripId: tripData.id,
+        }),
+      });
 
-    // useEffect for drag/schedule sync (Moved here)
-    useEffect(() => {
-      if (tripData?.schedule) {
-        setSchedule(tripData.schedule);
-      }
-    }, [tripData]);
+      const json = await res.json();
+      if (json.items) {
+        setSchedule(convertDBItemsToSchedule(json.items));
+      }
+    }
 
+    fetchSchedule();
+  }, [tripData, tripId, convertDBItemsToSchedule]); // tripData를 의존성에 추가
 
-    // ===================================================
-    // 🔥 [수정 3] 조건부 반환은 모든 Hooks 호출 이후에만 위치해야 합니다.
-    // ===================================================
+  // useEffect for drag/schedule sync (Moved here)
+  useEffect(() => {
+    if (tripData?.schedule) {
+      setSchedule(tripData.schedule);
+    }
+  }, [tripData]);
 
-    if (!tripData) {
-      return (
-        <div className="p-10 text-center">
-          <MapPinOff className="w-8 h-8 text-gray-300 mb-4 mx-auto" />
-          여행 정보를 불러올 수 없습니다.
-        </div>
-      );
-    }
+  // ===================================================
+  // 🔥 [수정 3] 조건부 반환은 모든 Hooks 호출 이후에만 위치해야 합니다.
+  // ===================================================
+
+  if (!tripData) {
+    return (
+      <div className="p-10 text-center">
+                  <MapPinOff className="w-8 h-8 text-gray-300 mb-4 mx-auto" /> 
+                여행 정보를 불러올 수 없습니다.        {" "}
+      </div>
+    );
+  }
   // ===============================
   // 🔥 편집 모드 & 드래그 상태
   // ==============================
-  
 
-  
   // 🖱️ 드래그 시작
   const handleDragStart = (
     e: React.DragEvent<HTMLDivElement>,
@@ -255,18 +254,12 @@ export default function MyTrip() {
       const [movedItem] = sourceList.splice(source.index, 1);
 
       if (source.day === targetDay) {
-        const safeIndex = Math.min(
-          Math.max(targetIndex, 0),
-          sourceList.length
-        );
+        const safeIndex = Math.min(Math.max(targetIndex, 0), sourceList.length);
         sourceList.splice(safeIndex, 0, movedItem);
         newSchedule[source.day] = sourceList;
         dragItem.current = { day: source.day, index: safeIndex };
       } else {
-        const safeIndex = Math.min(
-          Math.max(targetIndex, 0),
-          targetList.length
-        );
+        const safeIndex = Math.min(Math.max(targetIndex, 0), targetList.length);
         targetList.splice(safeIndex, 0, movedItem);
         newSchedule[source.day] = sourceList;
         newSchedule[targetDay] = targetList;
@@ -287,14 +280,13 @@ export default function MyTrip() {
       (t: any) => String(t.id) === String(tripData?.id)
     );
 
-
     if (idx !== -1) {
       trips[idx].schedule = schedule;
       localStorage.setItem("trips", JSON.stringify(trips));
 
-     navigate(".", {
+      navigate(".", {
         state: { tripData: { ...trips[idx] } },
-        replace: false
+        replace: false,
       });
     }
 
@@ -327,14 +319,13 @@ export default function MyTrip() {
       others: "지인",
     };
     return (
-      entries
-        .map(([k, v]) => `${labelMap[k] || k} ${v}명`)
-        .join(", ") + "과 함께"
+      entries.map(([k, v]) => `${labelMap[k] || k} ${v}명`).join(", ") +
+      "과 함께"
     );
   };
 
   // 날짜 계산
-   const startDate = tripData.dateRange.start;
+  const startDate = tripData.dateRange.start;
   const endDate = tripData.dateRange.end;
   const dayCount =
     startDate && endDate
@@ -352,90 +343,102 @@ export default function MyTrip() {
           };
         })
       : [];
-      // =============================================
-// AI 일정 최적화 API 요청
-// =============================================
-async function handleGenerateAITrip() {
-  if (!tripData) {
-    alert("여행 정보가 없습니다.");
-    return;
-  }
-
-  const userId = tripData.userId; // ✔ 사용자 ID
-  const tripId = tripData.id;     // ✔ 여행 ID
-
-  // ✔ 날짜 검증
-  if (!tripData.dateRange.start || !tripData.dateRange.end) {
-    alert("여행 날짜 정보가 잘못되었습니다.");
-    return;
-  }
-
-  const s = new Date(tripData.dateRange.start);
-    const tripStart = `${s.getFullYear()}-${String(s.getMonth()+1).padStart(2,'0')}-${String(s.getDate()).padStart(2,'0')}`;
-    
-    const e = new Date(tripData.dateRange.end);
-    const tripEnd = `${e.getFullYear()}-${String(e.getMonth()+1).padStart(2,'0')}-${String(e.getDate()).padStart(2,'0')}`;
-
-  try {
-    const res = await fetch("/api/optimize-trip", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, tripId, tripStart, tripEnd }),
-    });
-
-    const json = await res.json();
-console.log("👉 AI 서버 응답 전체:", json); // 전체 응답 구조 확인
-console.log("👉 AI 생성된 Route 데이터:", json.route); // Route 데이터 내용 확인
-
-    if (!json.ok) {
-      alert("AI 일정 생성 실패");
+  // =============================================
+  // AI 일정 최적화 API 요청
+  // =============================================
+  async function handleGenerateAITrip() {
+    if (!tripData) {
+      alert("여행 정보가 없습니다.");
       return;
     }
 
-    const serverRoute = json.route;
-    const newSchedule = convertRouteToLocalSchedule(serverRoute);
+    const userId = tripData.userId;
+    const tripId = tripData.id;
 
-    setSchedule(newSchedule);
-
-    // localStorage 반영
-    const trips = JSON.parse(localStorage.getItem("trips") || "[]");
-    const idx = trips.findIndex((t) => String(t.id) === String(tripId));
-    if (idx !== -1) {
-      trips[idx].schedule = newSchedule;
-      localStorage.setItem("trips", JSON.stringify(trips));
+    if (!tripData.dateRange.start || !tripData.dateRange.end) {
+      alert("여행 날짜 정보가 잘못되었습니다.");
+      return;
     }
 
-    alert("AI 일정이 생성되었습니다!");
-  } catch (err) {
-    console.error(err);
-    alert("AI 최적화 중 오류 발생");
+    const s = new Date(tripData.dateRange.start);
+    const tripStart = `${s.getFullYear()}-${String(s.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}-${String(s.getDate()).padStart(2, "0")}`;
+
+    const e = new Date(tripData.dateRange.end);
+    const tripEnd = `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}-${String(e.getDate()).padStart(2, "0")}`;
+
+    try {
+      const res = await fetch("/api/trip/optimize-trip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, tripId, tripStart, tripEnd }),
+      });
+
+      const json = await res.json();
+
+      console.log("👉 AI 서버 응답 전체:", json);
+
+      // 🔥 핵심 수정 1: 서버는 schedule을 보낼 수도 있으므로 둘 다 대응
+      const serverRoute = json.route || json.schedule;
+
+      // 🔥 핵심 수정 2: route 자체가 없으면 에러 방지
+      if (!serverRoute || Object.keys(serverRoute).length === 0) {
+        alert("AI 일정 생성 실패: 서버에서 route/schedule을 받지 못했습니다.");
+        return;
+      }
+
+      console.log("👉 사용되는 Route 데이터:", serverRoute);
+
+      // 🔥 핵심 수정 3: 여기서 변환
+      const newSchedule = convertRouteToLocalSchedule(serverRoute);
+
+      setSchedule(newSchedule);
+
+      // localStorage 반영
+      const trips = JSON.parse(localStorage.getItem("trips") || "[]");
+      const idx = trips.findIndex((t) => String(t.id) === String(tripId));
+      if (idx !== -1) {
+        trips[idx].schedule = newSchedule;
+        localStorage.setItem("trips", JSON.stringify(trips));
+      }
+
+      alert("AI 일정이 생성되었습니다!");
+    } catch (err) {
+      console.error(err);
+      alert("AI 최적화 중 오류 발생");
+    }
   }
-}
 
-// =============================================
-// 서버 route → MyTrip localSchedule 변환
-// route = { "2025-12-24": [...], "2025-12-25": [...] }
-// localSchedule = { 1: [...], 2: [...] }
-// =============================================
-function convertRouteToLocalSchedule(route) {
-  const dates = Object.keys(route).sort();
-  const schedule = {};
+  // =============================================
+  // 서버 route → MyTrip localSchedule 변환
+  // route = { "2025-12-24": [...], "2025-12-25": [...] }
+  // localSchedule = { 1: [...], 2: [...] }
+  // =============================================
+  function convertRouteToLocalSchedule(route) {
+    const dates = Object.keys(route).sort();
+    const schedule = {};
 
-  dates.forEach((dateStr, index) => {
-    const items = route[dateStr].map((it) => ({
-      ...it,
-      name: it.name || it.popup_name || it.title || "이름 없음",
-      location: it.address || it.location || "",
-      period: it.period_start && it.period_end
-        ? `${it.period_start} ~ ${it.period_end}`
-        : "",
-    }));
+    dates.forEach((dateStr, index) => {
+      const items = route[dateStr].map((it) => ({
+        ...it,
+        name: it.name || it.popup_name || it.title || "이름 없음",
+        location: it.address || it.location || "",
+        period:
+          it.period_start && it.period_end
+            ? `${it.period_start} ~ ${it.period_end}`
+            : "",
+      }));
 
-    schedule[index + 1] = items;
-  });
+      schedule[index + 1] = items;
+    });
 
-  return schedule;
-}
+    return schedule;
+  }
 
   /* -------------------------
      8) 이미지 업로드 저장 기능
@@ -453,7 +456,9 @@ function convertRouteToLocalSchedule(route) {
 
       // localStorage 반영
       const trips = JSON.parse(localStorage.getItem("trips") || "[]");
-      const idx = trips.findIndex((t: any) => String(t.id) === String(tripData.id));
+      const idx = trips.findIndex(
+        (t: any) => String(t.id) === String(tripData.id)
+      );
       if (idx !== -1) {
         trips[idx].imageUrl = base64;
         localStorage.setItem("trips", JSON.stringify(trips));
@@ -478,7 +483,7 @@ function convertRouteToLocalSchedule(route) {
         <div className="absolute top-0 inset-0 bg-gradient-to-t from-black/60 via-black/50 to-transparent" />
         <div className="absolute bottom-5 left-0 right-0 text-center text-white px-6">
           <h2 className="font-bold text-[20px] drop-shadow-md">
-            {tripData.country} {tripData.city} 여행 
+            {tripData.country} {tripData.city} 여행
           </h2>
           <p className="text-[14px] mt-1 opacity-90">
             {tripData.dateRange.text ||
@@ -504,11 +509,11 @@ function convertRouteToLocalSchedule(route) {
 
         {/* 뒤로가기 버튼 */}
         <button
-        type="button" // 🔥 필수: 명시적 버튼 타입 지정
-        onClick={(e) => {
-          e.stopPropagation(); // 이벤트 전파 방지
-          navigate("/", { replace: true });
-        }}
+          type="button" // 🔥 필수: 명시적 버튼 타입 지정
+          onClick={(e) => {
+            e.stopPropagation(); // 이벤트 전파 방지
+            navigate("/", { replace: true });
+          }}
           className="absolute bottom-12 left-4 text-white p-2 rounded-full bg-transparent hover: transition duration-300 focus:outline-none 
           hover:border-none active:outline-none active:shadow-lg"
         >
@@ -552,26 +557,28 @@ function convertRouteToLocalSchedule(route) {
                     {/* 편집 / 완료 토글 (첫 날만) */}
                     {index === 0 && (
                       <button
-                    onClick={() =>
-                      isEditMode ? handleSaveAll() : setIsEditMode(true)
-                    }
-                    // 부모 버튼: 기본적인 위치 잡기 및 리셋
-                    className="outline-none border-none p-1 translate-y-[6px] focus:outline-none focus:ring-0 active:outline-none bg-transparent"
-                  >
-                    {isEditMode ? (
-                      // ✅ 수정됨: 체크 버튼 (반응형 애니메이션 추가)
-                      // hover:bg-[#8bcafc] -> 마우스 올리면 조금 더 진한 하늘색
-                      // active:scale-90 -> 클릭하면 살짝 작아지는 효과 (눌리는 느낌)
-                      // transition-all -> 부드러운 전환
-                      <div className="w-5 h-5 bg-[#8bcafc] rounded-full flex items-center justify-center shadow-sm 
-                                      hover:bg-[#7bc5ff] border-1 border-[#706F6F] active:scale-90 transition-all duration-200 cursor-pointer">
-                        <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
-                      </div>
-                    ) : (
-                      // 연필 아이콘: 기존과 동일하게 색상만 변경
-                      <Pencil className="w-3.5 h-3.5 text-[#BDBDBD] hover:text-[#706F6F] transition-colors cursor-pointer" />
-                    )}
-                  </button>
+                        onClick={() =>
+                          isEditMode ? handleSaveAll() : setIsEditMode(true)
+                        }
+                        // 부모 버튼: 기본적인 위치 잡기 및 리셋
+                        className="outline-none border-none p-1 translate-y-[6px] focus:outline-none focus:ring-0 active:outline-none bg-transparent"
+                      >
+                        {isEditMode ? (
+                          // ✅ 수정됨: 체크 버튼 (반응형 애니메이션 추가)
+                          // hover:bg-[#8bcafc] -> 마우스 올리면 조금 더 진한 하늘색
+                          // active:scale-90 -> 클릭하면 살짝 작아지는 효과 (눌리는 느낌)
+                          // transition-all -> 부드러운 전환
+                          <div
+                            className="w-5 h-5 bg-[#8bcafc] rounded-full flex items-center justify-center shadow-sm 
+                                      hover:bg-[#7bc5ff] border-1 border-[#706F6F] active:scale-90 transition-all duration-200 cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
+                          </div>
+                        ) : (
+                          // 연필 아이콘: 기존과 동일하게 색상만 변경
+                          <Pencil className="w-3.5 h-3.5 text-[#BDBDBD] hover:text-[#706F6F] transition-colors cursor-pointer" />
+                        )}
+                      </button>
                     )}
                   </div>
 
@@ -593,62 +600,61 @@ function convertRouteToLocalSchedule(route) {
                   )}
 
                   {placesForDay.map((place: any, pIndex: number) => (
-                <div
-                  key={place.id || pIndex}
-                  className={`relative transition-all duration-200 ${
-                    isEditMode ? "pl-2 cursor-move" : "pl-10"
-                  }`}
-                  draggable={isEditMode}
-                  onDragStart={(e) => handleDragStart(e, d.day, pIndex)}
-                  onDragEnter={(e) => handleDragEnter(e, d.day, pIndex)}
-                  onDragEnd={handleDragEnd}
-                  onDragOver={(e) => {
-                    if (isEditMode) e.preventDefault();
-                  }}
-                >
-                  {/* 편집 모드: 그립 아이콘 / 기본 모드: 원래 번호 동그라미 디자인 그대로 */}
-                  <div
-                    className={`absolute top-1/2 -translate-y-1/2 flex items-center justify-center ${
-                      isEditMode
-                        ? "left-3 w-5 h-5 text-gray-400"
-                        : "-left-0 w-5 h-5 bg-[#007AFF] rounded-full text-[#FFFDFD] font-bold text-[14px] ring-4 ring-white"
-                    }`}
-                  >
-                    {isEditMode ? (
-                      <GripVertical className="w-4 h-4" />
-                    ) : (
-                      pIndex + 1
-                    )}
-                  </div>
+                    <div
+                      key={place.id || pIndex}
+                      className={`relative transition-all duration-200 ${
+                        isEditMode ? "pl-2 cursor-move" : "pl-10"
+                      }`}
+                      draggable={isEditMode}
+                      onDragStart={(e) => handleDragStart(e, d.day, pIndex)}
+                      onDragEnter={(e) => handleDragEnter(e, d.day, pIndex)}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={(e) => {
+                        if (isEditMode) e.preventDefault();
+                      }}
+                    >
+                      {/* 편집 모드: 그립 아이콘 / 기본 모드: 원래 번호 동그라미 디자인 그대로 */}
+                      <div
+                        className={`absolute top-1/2 -translate-y-1/2 flex items-center justify-center ${
+                          isEditMode
+                            ? "left-3 w-5 h-5 text-gray-400"
+                            : "-left-0 w-5 h-5 bg-[#007AFF] rounded-full text-[#FFFDFD] font-bold text-[14px] ring-4 ring-white"
+                        }`}
+                      >
+                        {isEditMode ? (
+                          <GripVertical className="w-4 h-4" />
+                        ) : (
+                          pIndex + 1
+                        )}
+                      </div>
 
-                  {/* 장소 카드 */}
-                  <div
-                    className={`flex flex-col items-start bg-[#F8FAFC] border border-gray-200 -mx-1 rounded-lg text-left ${
-                      isEditMode
-                        ? "pl-8 pr-2 py-2 bg-white shadow-sm border-blue-200"
-                        : "px-3 py-2"
-                    }`}
-                  >
-                    <p className="text-[13px] font-semibold text-[#706F6F] leading-snug">
-                      {place.name}
-                    </p>
-                    {(place.period || place.time) && (
-                      <p className="text-[12px] font-medium text-[#706F6F]">
-                        📅{" "}
-                        {place.period && place.time
-                          ? `${place.period} / ${place.time}`
-                          : place.period || place.time}
-                      </p>
-                    )}
-                    {place.location && (
-                      <p className="text-[12px] font-medium text-[#706F6F]">
-                        📍 {place.location}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-
+                      {/* 장소 카드 */}
+                      <div
+                        className={`flex flex-col items-start bg-[#F8FAFC] border border-gray-200 -mx-1 rounded-lg text-left ${
+                          isEditMode
+                            ? "pl-8 pr-2 py-2 bg-white shadow-sm border-blue-200"
+                            : "px-3 py-2"
+                        }`}
+                      >
+                        <p className="text-[13px] font-semibold text-[#706F6F] leading-snug">
+                          {place.name}
+                        </p>
+                        {(place.period || place.time) && (
+                          <p className="text-[12px] font-medium text-[#706F6F]">
+                            📅{" "}
+                            {place.period && place.time
+                              ? `${place.period} / ${place.time}`
+                              : place.period || place.time}
+                          </p>
+                        )}
+                        {place.location && (
+                          <p className="text-[12px] font-medium text-[#706F6F]">
+                            📍 {place.location}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
 
                   {/* 장소 추가 (편집 모드 아닐 때만) */}
                   {!isEditMode && (
@@ -688,23 +694,23 @@ function convertRouteToLocalSchedule(route) {
 
       {/* 챗봇 버튼 */}
       <button
-  type="button" // 🔥 필수
-  onClick={(e) => {
-    e.stopPropagation();
-    
-    // id가 유효한지 확인 후 이동
-    if (tripData && tripData.id) {
-      navigate("/chatbot", { 
-        state: { 
-          id: tripData.id,      // ID도 보내고
-          tripData: tripData    // 🔥 여행 데이터 전체 객체도 꼭 같이 보내야 함!
-        }, 
-        replace: false 
-      });
-    } else {
-      alert("여행 정보를 찾을 수 없습니다.");
-    }
-  }}
+        type="button" // 🔥 필수
+        onClick={(e) => {
+          e.stopPropagation();
+
+          // id가 유효한지 확인 후 이동
+          if (tripData && tripData.id) {
+            navigate("/chatbot", {
+              state: {
+                id: tripData.id, // ID도 보내고
+                tripData: tripData, // 🔥 여행 데이터 전체 객체도 꼭 같이 보내야 함!
+              },
+              replace: false,
+            });
+          } else {
+            alert("여행 정보를 찾을 수 없습니다.");
+          }
+        }}
         className="fixed bottom-9 right-8 rounded-full w-[62px] h-[62px] border-2  bg-white shadow-xl
         transition-all duration-100 focus:outline-none focus:ring-0 
                   active:scale-100 hover:bg-gray-50 hover:border-blue-400

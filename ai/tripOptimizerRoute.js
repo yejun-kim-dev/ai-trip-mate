@@ -21,6 +21,9 @@ router.post("/optimize-trip", async (req, res) => {
       optimized = adjustByTime(optimized);
       result[date] = optimized;
     }
+    //---------------------------------------
+    // ⭐ 여기서 규칙 기반 정렬 엔진 적용
+    //---------------------------------------
 
     return res.json({ ok: true, route: result });
   } catch (err) {

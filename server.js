@@ -10,7 +10,7 @@ import https from "https";
 import { addTripItem } from "./ai/api/addTripItem.js";
 
 // 수집 유틸 import
-import { fetchNaverNewsPopups } from "./utils/fetchNaverNewsPopups.js";
+
 import kakaoRoute from "./ai/api/kakaoRoute.js";
 import tripOptimizerRoute from "./ai/tripOptimizerRoute.js";
 import { fetchNaverBlogPopups } from "./utils/fetchNaverBlogPopups.js";
@@ -23,7 +23,6 @@ import { fetchDaeguEvents } from "./ai/data/fetchDaeguEvents.js"; // ===========
 import {
   fetchUserTripItems,
   optimizeWithFixedStops,
-  buildFinalTrip,
 } from "./ai/services/tripService.js";
 
 // 더미 식당 / 숙소 불러오기
@@ -59,6 +58,44 @@ async function geocode(address) {
     return null;
   }
 }
+// ==============================
+// 📌 여행 일정 불러오기 API
+// ==============================
+app.post("/api/get-trip-items", async (req, res) => {
+  try {
+    const { userId, tripId } = req.body;
+
+    if (!userId || !tripId) {
+      return res.status(400).json({
+        ok: false,
+        error: "userId와 tripId는 필수입니다.",
+      });
+    }
+
+    const { data, error } = await supabase
+      .from("user_trip_items")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("trip_id", tripId)
+      .order("visit_order", { ascending: true });
+
+    if (error) {
+      console.error(error);
+      return res.status(500).json({ ok: false, error: "DB 조회 실패" });
+    }
+
+    return res.json({
+      ok: true,
+      items: data || [],
+    });
+  } catch (err) {
+    console.error("🔥 get-trip-items 오류:", err);
+    return res.status(500).json({
+      ok: false,
+      error: "서버 오류",
+    });
+  }
+});
 
 app.post("/api/add-trip-items", async (req, res) => {
   try {
@@ -113,81 +150,65 @@ app.post("/api/add-trip-items", async (req, res) => {
   }
 });
 
-app.post("/api/optimize-route", optimizeRoute);
-
-app.post("/api/optimize-route", async (req, res) => {
+app.post("/api/get-my-trips", async (req, res) => {
   try {
-    const { userId, tripStart, tripEnd } = req.body;
+    const { userId } = req.body;
 
-    if (!userId || !tripStart || !tripEnd) {
-      return res.status(400).json({
-        error: "userId, tripStart, tripEnd는 필수입니다.",
-      });
+    if (!userId) {
+      return res.status(400).json({ ok: false, error: "userId 필요" });
     }
 
-    // 1) DB에서 사용자 일정 아이템 가져오기
-    const items = await fetchUserTripItems(userId, tripStart, tripEnd);
+    const { data, error } = await supabase
+      .from("trips")
+      .select("*")
+      .eq("user_id", userId)
+      .order("start_date", { ascending: true });
 
-    if (items.length === 0) {
-      return res.json({
-        ok: true,
-        message: "데이터 없음",
-        schedule: {},
-      });
+    if (error) {
+      console.error(error);
+      return res.status(500).json({ ok: false, error: "DB 조회 실패" });
     }
 
-    // 2) 거리 기반 정렬 (기존 Kakao 최적화 로직)
-    const optimizedItems = optimizeWithFixedStops(items);
-
-    // 3) 날짜 수 계산 (예: 2박 3일 → 3일)
-    const totalDays =
-      (new Date(tripEnd) - new Date(tripStart)) / (1000 * 60 * 60 * 24) + 1;
-
-    // 4) 최종 일정 엔진 실행 (식당 균등 / 팝업 균등 / 숙소 마지막날 제외)
-    const finalSchedule = buildFinalTrip(
-      optimizedItems,
-      dummyRestaurants,
-      dummyHotels,
-      totalDays
-    );
-
-    return res.json({
-      ok: true,
-      message: "최종 일정 생성 완료",
-      schedule: finalSchedule,
-    });
+    return res.json({ ok: true, trips: data || [] });
   } catch (err) {
-    console.error("❌ 일정 생성 오류:", err);
-    return res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ ok: false, error: "서버 오류" });
   }
 });
 
 app.use("/api/trip", tripOptimizerRoute);
 const PORT = process.env.PORT || 8000;
 app.use("/api/kakao", kakaoRoute);
+
 app.post("/api/trip/create", async (req, res) => {
   try {
     const { userId, country, city, startDate, endDate, companions } = req.body;
 
-    // trip 구조
     const trip = {
       id: Date.now(),
-      userId,
+      user_id: userId,
       country,
       city,
-      startDate,
-      endDate,
+      start_date: startDate,
+      end_date: endDate,
       companions,
       created_at: new Date().toISOString(),
     };
+
+    const { error } = await supabase.from("trips").insert([trip]);
+
+    if (error) {
+      console.error(error);
+      return res.status(500).json({ ok: false, error: "DB 저장 실패" });
+    }
 
     return res.json({
       ok: true,
       trip,
     });
   } catch (err) {
-    console.error("❌ trip create error:", err);
-    res.status(500).json({ error: "여행 생성 실패" });
+    console.error(err);
+    res.status(500).json({ ok: false, error: "서버 오류" });
   }
 });
 
@@ -359,57 +380,6 @@ app.listen(PORT, () => {
 // ==============================
 // 📌 시연용: 2박 3일 일정 자동 분배 엔진
 // ==============================
-
-app.post("/api/optimize-trip", async (req, res) => {
-  try {
-    const { userId, tripStart, tripEnd } = req.body;
-
-    if (!userId || !tripStart || !tripEnd) {
-      return res.status(400).json({
-        ok: false,
-        error: "userId, tripStart, tripEnd는 필수입니다.",
-      });
-    }
-
-    // 1) DB에서 일정 불러오기
-    const rawItems = await fetchUserTripItems(userId, tripStart, tripEnd);
-
-    if (rawItems.length === 0) {
-      return res.json({
-        ok: true,
-        message: "일정 데이터 없음",
-        schedule: {},
-      });
-    }
-
-    // 2) 고정 지점(식당/숙소) 제외한 팝업 기반 거리 최적화
-    const optimizedItems = optimizeWithFixedStops(rawItems);
-
-    // 3) 전체 여행 일수 계산 (2박 3일 → 3일)
-    const totalDays =
-      (new Date(tripEnd) - new Date(tripStart)) / (1000 * 60 * 60 * 24) + 1;
-
-    // 4) ⭐ 최종 일정 엔진 실행
-    const finalSchedule = buildFinalTrip(
-      optimizedItems,
-      dummyRestaurants,
-      dummyHotels,
-      totalDays
-    );
-
-    return res.json({
-      ok: true,
-      message: "동선 최적화 + 날짜 자동 분배 완료",
-      schedule: finalSchedule,
-    });
-  } catch (err) {
-    console.error("❌ optimize-trip 오류:", err);
-    return res.status(500).json({
-      ok: false,
-      error: err.message,
-    });
-  }
-});
 
 // 에러 핸들링
 process.on("unhandledRejection", (err) => {

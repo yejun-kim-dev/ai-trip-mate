@@ -40,17 +40,16 @@ export default function Home() {
   const [trips, setTrips] = useState<TripState[]>([]);
   const navigate = useNavigate();
 
-  // ✅ 5. [핵심 수정] DB에서 데이터 가져오기 (localStorage 로직 제거)
   useEffect(() => {
-    async function fetchDBTrips() {
-      try {
-        console.log("🚀 DB 여행 목록 요청 중...");
-        
-        const res = await fetch("/api/get-my-trips", {
-    method: "POST", // 🔥 여기가 POST로 되어 있는지 확인!
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId: USER_ID || "user001" }),
-});
+  async function fetchDBTrips() {
+    try {
+      console.log("🚀 DB 여행 목록 요청 중...");
+
+      const res = await fetch("http://localhost:8000/api/get-my-trips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: USER_ID || "user001" }),
+      });
         
         const json = await res.json();
         console.log("📦 DB 응답:", json);
